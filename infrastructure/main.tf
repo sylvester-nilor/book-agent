@@ -1,9 +1,34 @@
 terraform {
-  backend "gcs" {}
+  # Temporarily using local backend until GCS bucket is created
+  # backend "gcs" {}
 }
 
 data "google_compute_default_service_account" "default" {
   project = var.project_id
+}
+
+# -------------------------------------------------------------------------
+# Enable Required APIs
+# -------------------------------------------------------------------------
+
+resource "google_project_service" "enable_firestore" {
+  project = var.project_id
+  service = "firestore.googleapis.com"
+}
+
+resource "google_project_service" "enable_cloud_run" {
+  project = var.project_id
+  service = "run.googleapis.com"
+}
+
+resource "google_project_service" "enable_bigquery" {
+  project = var.project_id
+  service = "bigquery.googleapis.com"
+}
+
+resource "google_project_service" "enable_storage" {
+  project = var.project_id
+  service = "storage.googleapis.com"
 }
 
 # -------------------------------------------------------------------------
@@ -37,6 +62,13 @@ resource "google_service_account" "cloud_run_app_sa" {
   project      = var.project_id
   account_id   = var.service_account_run
   display_name = "Cloud Run service account"
+
+  depends_on = [
+    google_project_service.enable_firestore,
+    google_project_service.enable_cloud_run,
+    google_project_service.enable_bigquery,
+    google_project_service.enable_storage
+  ]
 }
 
 resource "google_project_iam_member" "pipeline_sa_bigquery" {
@@ -76,6 +108,19 @@ resource "google_project_iam_member" "pipeline_sa_firestore" {
   project = var.project_id
   role    = "roles/datastore.user"
   member  = "serviceAccount:${google_service_account.cloud_run_app_sa.email}"
+}
+
+# -------------------------------------------------------------------------
+# Firestore Database
+# -------------------------------------------------------------------------
+
+resource "google_firestore_database" "database" {
+  project     = var.project_id
+  name        = "(default)"
+  location_id = "us-central1"
+  type        = "FIRESTORE_NATIVE"
+
+  depends_on = [google_project_service.enable_firestore]
 }
 
 # resource "google_project_iam_member" "pipeline_sa_dataflow" {
@@ -152,6 +197,8 @@ resource "google_bigquery_dataset" "raw_dataset" {
   location    = var.bq_location
   max_time_travel_hours = 168  # 7 days
   description = "Dataset to hold all raw data ingested"
+
+  depends_on = [google_project_service.enable_bigquery]
 }
 
 resource "google_bigquery_dataset" "curated_dataset" {
@@ -274,6 +321,8 @@ resource "google_storage_bucket" "pipeline_bucket" {
   project  = var.project_id
   location = var.region
   name     = var.pipeline_bucket_name
+
+  depends_on = [google_project_service.enable_storage]
 }
 
 
@@ -338,6 +387,11 @@ resource "google_cloud_run_service" "cloud_run_app" {
   name     = var.service_name_kebab_case
   project  = var.project_id
   location = var.region
+
+  depends_on = [
+    google_project_service.enable_cloud_run,
+    google_firestore_database.database
+  ]
 
   template {
     spec {

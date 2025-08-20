@@ -96,8 +96,6 @@ echo "Running Terraform..."
 
 # Initialize Terraform
 if ! terraform -chdir=./infrastructure init \
-  -backend-config="bucket=robot-rnd-nilor-gcp-terraform-state" \
-  -backend-config="prefix=$SERVICE_NAME" \
   -var="project_id=$PROJECT" \
   -var="region=$REGION" \
   -var="bq_location=$BQ_LOCATION" \
