@@ -1,0 +1,30 @@
+# general things to ignore
+build/
+dist/
+*.egg-info/
+*.egg
+*.py[cod]
+__pycache__/
+*.so
+*~
+
+# due to using tox and pytest
+.tox
+.cache
+.idea
+venv
+.venv
+.pytest_cache
+
+*.csv
+
+*.private.env.json
+/infrastructure/.terraform/
+
+# Data files
+data/
+
+# Terraform state files (local state)
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl

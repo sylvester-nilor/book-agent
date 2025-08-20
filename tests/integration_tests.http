@@ -1,0 +1,25 @@
+###
+# @name Search
+POST {{host}}/search
+Content-Type: application/json
+Authorization:Bearer {{auth}}
+
+{
+  "query": "artificial intelligence and machine learning"
+}
+
+> {%
+    client.test("Request executed successfully", function () {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+
+    client.test("Response content-type is json", function () {
+        var type = response.contentType.mimeType;
+        client.assert(type === "application/json", "Expected 'application/json' but received '" + type + "'");
+    });
+
+    client.test("Response has expected structure", function () {
+        client.assert(response.body.status === "success", "Expected status 'success'");
+        client.assert(Array.isArray(response.body.result), "Expected result to be an array");
+    });
+%}
