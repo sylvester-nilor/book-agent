@@ -1,19 +1,16 @@
-import json
 import os
-from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional, TypedDict, Annotated
-
-import google.auth
-from google.auth.transport.requests import AuthorizedSession
-from google.auth.transport.requests import Request
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from typing import Optional
+from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, END
 
-
-class AgentState(TypedDict):
-    messages: Annotated[List[BaseMessage], "The messages in the conversation"]
-    search_results: Annotated[Optional[List[Dict[str, Any]]], "Results from search tool"]
+import sys
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+from models.agent_state import AgentState
+from nodes.search_node import SearchNode
+from nodes.respond_node import RespondNode
+from utils.auth import get_auth_token
 
 
 class AgentService:
@@ -22,87 +19,52 @@ class AgentService:
         self.search_service_url = search_service_url
         self.auth_token = auth_token
         self.memory_saver = MemorySaver()
+        
+        # Initialize nodes
+        self.search_node = SearchNode(search_service_url, auth_token)
+        self.respond_node = RespondNode()
+        
+        # Build agent
         self.agent = self._build_agent()
-        self._auth_session = None
-
-    def _get_auth_session(self) -> AuthorizedSession:
-        """Get an authenticated session for calling the search service."""
-        if self._auth_session is None:
-            credentials, _ = google.auth.default()
-            if not credentials.valid:
-                credentials.refresh(Request())
-            self._auth_session = AuthorizedSession(credentials)
-        return self._auth_session
-
-    def _get_auth_token(self) -> str:
-        """Get an authentication token for calling the search service."""
-        credentials, _ = google.auth.default()
-        if not credentials.valid:
-            credentials.refresh(Request())
-        return credentials.token
 
     def _build_agent(self):
+        """Build the LangGraph agent workflow."""
         workflow = StateGraph(AgentState)
 
+        # Add nodes
         workflow.add_node("search", self._search_node)
         workflow.add_node("respond", self._respond_node)
 
+        # Set entry point and edges
         workflow.set_entry_point("search")
         workflow.add_edge("search", "respond")
         workflow.add_edge("respond", END)
 
         return workflow.compile(checkpointer=self.memory_saver)
 
-    async def search_tool(self, query: str) -> List[Dict[str, Any]]:
-        """Search for relevant book content based on the query."""
-        try:
-            import httpx
-            
-            headers = {"Content-Type": "application/json"}
-            
-            if self.auth_token:
-                headers["Authorization"] = f"Bearer {self.auth_token}"
-            else:
-                # In production, use the service account credentials
-                auth_session = self._get_auth_session()
-                return await self._search_with_auth_session(query, auth_session)
-            
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.search_service_url}/search",
-                    json={"query": query, "limit": 5},
-                    headers=headers,
-                    timeout=30.0
-                )
-                response.raise_for_status()
-                result = response.json()
-                return result.get("result", [])
-        except Exception as e:
-            print(f"Error calling search service: {str(e)}")
-            return []
-
-    async def _search_with_auth_session(self, query: str, auth_session: AuthorizedSession) -> List[Dict[str, Any]]:
-        """Search using the authenticated session (for production)."""
-        try:
-            response = auth_session.post(
-                f"{self.search_service_url}/search",
-                json={"query": query, "limit": 5},
-                timeout=30.0
-            )
-            response.raise_for_status()
-            result = response.json()
-            return result.get("result", [])
-        except Exception as e:
-            print(f"Error calling search service with auth session: {str(e)}")
-            return []
-
     async def _search_node(self, state: AgentState) -> AgentState:
-        """Node that performs search if needed."""
+        """Node that performs search."""
         messages = state["messages"]
         last_message = messages[-1]
 
         if isinstance(last_message, HumanMessage):
-            search_results = await self.search_tool(last_message.content)
+            # Check if this is a simple greeting/thanks/goodbye
+            query_lower = last_message.content.lower()
+            
+            if any(word in query_lower for word in ["hello", "hi", "hey"]):
+                # Skip search for greetings
+                return {"messages": messages, "search_results": []}
+            
+            if any(word in query_lower for word in ["thank", "thanks"]):
+                # Skip search for thanks
+                return {"messages": messages, "search_results": []}
+            
+            if any(word in query_lower for word in ["goodbye", "bye", "see you"]):
+                # Skip search for goodbyes
+                return {"messages": messages, "search_results": []}
+            
+            # Perform search for other queries
+            search_results = await self.search_node.search(last_message.content)
             return {"messages": messages, "search_results": search_results}
 
         return {"messages": messages, "search_results": []}
@@ -114,47 +76,56 @@ class AgentService:
 
         last_message = messages[-1]
         if isinstance(last_message, HumanMessage):
-            response_content = self._synthesize_response(
-                user_message=last_message.content,
-                search_results=search_results
-            )
+            # Generate appropriate response based on message type
+            query_lower = last_message.content.lower()
+            
+            if any(word in query_lower for word in ["hello", "hi", "hey"]):
+                response_content = self.respond_node.generate_greeting_response(last_message.content)
+            elif any(word in query_lower for word in ["thank", "thanks"]):
+                response_content = self.respond_node.generate_thanks_response(last_message.content)
+            elif any(word in query_lower for word in ["goodbye", "bye", "see you"]):
+                response_content = self.respond_node.generate_goodbye_response(last_message.content)
+            elif search_results:
+                response_content = self.respond_node.generate_response(last_message.content, search_results)
+            else:
+                response_content = self.respond_node.generate_fallback_response(last_message.content)
 
             ai_message = AIMessage(content=response_content)
             messages.append(ai_message)
 
         return {"messages": messages, "search_results": search_results}
 
-    def _synthesize_response(self, user_message: str, search_results: List[Dict[str, Any]]) -> str:
-        """Synthesize a conversational response from search results."""
-        if not search_results:
-            return "I couldn't find any relevant information in the books. Could you please rephrase your question or ask about a different topic?"
-
-        response_parts = []
-        response_parts.append("Based on the books, here's what I found:")
-
-        for i, result in enumerate(search_results[:3], 1):
-            book_id = result.get("book_id", "Unknown book")
-            content = result.get("content", "")
-            page_number = result.get("page_number", "")
-
-            response_parts.append(f"\n{i}. From {book_id}")
-            if page_number:
-                response_parts.append(f"   (Page {page_number})")
-            response_parts.append(f"   {content[:200]}{'...' if len(content) > 200 else ''}")
-
-        response_parts.append(f"\n\nIs there anything specific about this information you'd like me to elaborate on?")
-
-        return " ".join(response_parts)
-
     async def chat(self, message: str, thread_id: str) -> str:
         """Main chat method that handles the conversation."""
         try:
             config = {"configurable": {"thread_id": thread_id}}
 
-            result = await self.agent.ainvoke(
-                {"messages": [HumanMessage(content=message)]},
-                config=config
-            )
+            # Get existing state or create new one
+            try:
+                # Try to get existing state from checkpoint
+                existing_state = await self.agent.aget_state(config)
+                if existing_state:
+                    # Add new message to existing conversation
+                    existing_messages = existing_state["messages"]
+                    existing_messages.append(HumanMessage(content=message))
+                    initial_state = {
+                        **existing_state,
+                        "messages": existing_messages
+                    }
+                else:
+                    # Create new state
+                    initial_state = {
+                        "messages": [HumanMessage(content=message)],
+                        "search_results": None
+                    }
+            except Exception:
+                # If no existing state, create new one
+                initial_state = {
+                    "messages": [HumanMessage(content=message)],
+                    "search_results": None
+                }
+
+            result = await self.agent.ainvoke(initial_state, config=config)
 
             messages = result["messages"]
             if messages and isinstance(messages[-1], AIMessage):
@@ -166,45 +137,14 @@ class AgentService:
             print(f"Error in chat: {str(e)}")
             return f"I encountered an error while processing your request: {str(e)}"
 
-    def _log_chat(self, thread_id: str, message: str, response: str,
-                  execution_time: float, error_message: Optional[str] = None) -> None:
-        """Log chat interactions for monitoring."""
-        try:
-            chat_log = {
-                "thread_id": thread_id,
-                "user_message": message,
-                "agent_response": response,
-                "execution_time": execution_time,
-                "error_message": error_message,
-                "inserted_at": datetime.now(timezone.utc).isoformat()
-            }
-
-            print(f"Chat log: {json.dumps(chat_log, indent=2)}")
-
-        except Exception as e:
-            print(f"Error logging chat: {str(e)}")
-
 
 if __name__ == "__main__":
     import asyncio
-    import subprocess
 
-
-    async def test_chat():
+    async def test_conversation():
         project_id = os.getenv("GCP_PROJECT", "robot-rnd-nilor-gcp")
         search_service_url = os.getenv("SEARCH_SERVICE_URL", "https://search-v1-959508709789.us-central1.run.app")
-
-        # Get auth token from gcloud CLI
-        try:
-            auth_token = subprocess.check_output(
-                ["gcloud", "auth", "print-identity-token"],
-                text=True,
-                stderr=subprocess.PIPE
-            ).strip()
-            print(f"Got auth token: {auth_token[:20]}...")
-        except subprocess.CalledProcessError as e:
-            print(f"Error getting auth token: {e}")
-            auth_token = None
+        auth_token = get_auth_token()
 
         service = AgentService(
             project_id=project_id,
@@ -212,11 +152,28 @@ if __name__ == "__main__":
             auth_token=auth_token
         )
 
-        response = await service.chat(
-            message="What is digital sovereignty?",
-            thread_id="test-thread-123"
-        )
-        print(f"Response: {response}")
+        # Test conversation
+        thread_id = "test-conversation-123"
+        
+        print("=== Testing full conversation ===")
+        
+        # Test greeting
+        response1 = await service.chat("Hello!", thread_id)
+        print(f"Greeting: {response1}")
+        print()
+        
+        # Test search query
+        response2 = await service.chat("What is digital sovereignty?", thread_id)
+        print(f"Search query: {response2}")
+        print()
+        
+        # Test follow-up
+        response3 = await service.chat("How does it relate to network states?", thread_id)
+        print(f"Follow-up: {response3}")
+        print()
+        
+        # Test thanks
+        response4 = await service.chat("Thank you!", thread_id)
+        print(f"Thanks: {response4}")
 
-
-    asyncio.run(test_chat())
+    asyncio.run(test_conversation())
