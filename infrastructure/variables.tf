@@ -87,3 +87,13 @@ variable "backup_bucket_name" {
     error_message = "The backup_bucket_name variable cannot be empty. Please provide a valid GCS bucket name."
   }
 }
+
+variable "search_service_url" {
+  description = "The URL of the search service to call"
+  type        = string
+
+  validation {
+    condition     = length(var.search_service_url) > 0
+    error_message = "The search_service_url variable cannot be empty. Please provide a valid search service URL."
+  }
+}

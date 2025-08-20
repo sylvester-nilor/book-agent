@@ -7,6 +7,7 @@ BQ_LOCATION="US"
 
 SERVICE_NAME="book_agent_v1"  # snake_case (for everything except where kebab-case is mandatory)
 SERVICE_NAME_KEBAB_CASE=$(echo "$SERVICE_NAME" | tr '_' '-')
+SEARCH_SERVICE_URL="https://search-v1-959508709789.us-central1.run.app"
 
 # Service Account Names must be 6-30 characters, lowercase alphanumeric. If the name prevents this, you may need to use an abbreviation.
 # DO NOT ABBREVIATE THE SERVICE NAME ITSELF. USE AN ABBREVIATION FOR THE SERVICE ACCOUNT NAME ONLY.
@@ -105,7 +106,8 @@ if ! terraform -chdir=./infrastructure init \
   -var="service_account_run=$SERVICE_ACCOUNT_RUN" \
   -var="image=$IMAGE" \
   -var="pipeline_bucket_name=$PIPELINE_BUCKET_NAME" \
-  -var="backup_bucket_name=$BACKUP_BUCKET_NAME"; then
+  -var="backup_bucket_name=$BACKUP_BUCKET_NAME" \
+  -var="search_service_url=$SEARCH_SERVICE_URL"; then
   echo "Error: Terraform init failed."
   exit 1
 fi
@@ -120,7 +122,8 @@ if ! terraform -chdir=./infrastructure apply \
   -var="service_account_run=$SERVICE_ACCOUNT_RUN" \
   -var="image=$IMAGE" \
   -var="pipeline_bucket_name=$PIPELINE_BUCKET_NAME" \
-  -var="backup_bucket_name=$BACKUP_BUCKET_NAME"; then
+  -var="backup_bucket_name=$BACKUP_BUCKET_NAME" \
+  -var="search_service_url=$SEARCH_SERVICE_URL"; then
   echo "Error: Terraform apply failed."
   exit 1
 fi

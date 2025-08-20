@@ -1,6 +1,5 @@
 terraform {
-  # Temporarily using local backend until GCS bucket is created
-  # backend "gcs" {}
+  backend "gcs" {}
 }
 
 data "google_compute_default_service_account" "default" {
@@ -69,6 +68,13 @@ resource "google_project_iam_member" "pipeline_sa_book_to_struct_reader" {
 resource "google_project_iam_member" "pipeline_sa_paragraph_embedding_connection_user" {
   project = var.project_id
   role    = "roles/bigquery.connectionUser"
+  member  = "serviceAccount:${google_service_account.cloud_run_app_sa.email}"
+}
+
+# Grant Firestore permissions to the Cloud Run service account
+resource "google_project_iam_member" "pipeline_sa_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
   member  = "serviceAccount:${google_service_account.cloud_run_app_sa.email}"
 }
 
@@ -242,7 +248,7 @@ resource "google_bigquery_dataset_iam_member" "backup_dataset_run" {
 #   member     = "group:engineering@yourcompany.com"
 # }
 
-resource "google_bigquery_connection" "book agent_connection" {
+resource "google_bigquery_connection" "book_agent_connection" {
   project       = var.project_id
   connection_id = "book_agent_v1_connection"
   location      = "US"
@@ -253,7 +259,7 @@ resource "google_bigquery_connection" "book agent_connection" {
 resource "google_project_iam_member" "connection_vertex_ai_user" {
   project = var.project_id
   role    = "roles/aiplatform.user"
-  member  = "serviceAccount:${google_bigquery_connection.search_connection.cloud_resource[0].service_account_id}"
+  member  = "serviceAccount:${google_bigquery_connection.book_agent_connection.cloud_resource[0].service_account_id}"
 }
 
 
@@ -348,6 +354,10 @@ resource "google_cloud_run_service" "cloud_run_app" {
         env {
           name  = "BACKUP_BUCKET_NAME"
           value = var.backup_bucket_name
+        }
+        env {
+          name  = "SEARCH_SERVICE_URL"
+          value = var.search_service_url
         }
       }
       service_account_name = google_service_account.cloud_run_app_sa.email

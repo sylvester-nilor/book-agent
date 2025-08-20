@@ -57,12 +57,16 @@ class AgentService:
         """Search for relevant book content based on the query."""
         try:
             import httpx
-
+            
             headers = {"Content-Type": "application/json"}
-
+            
             if self.auth_token:
                 headers["Authorization"] = f"Bearer {self.auth_token}"
-
+            else:
+                # In production, use the service account credentials
+                auth_session = self._get_auth_session()
+                return await self._search_with_auth_session(query, auth_session)
+            
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{self.search_service_url}/search",
@@ -75,6 +79,21 @@ class AgentService:
                 return result.get("result", [])
         except Exception as e:
             print(f"Error calling search service: {str(e)}")
+            return []
+
+    async def _search_with_auth_session(self, query: str, auth_session: AuthorizedSession) -> List[Dict[str, Any]]:
+        """Search using the authenticated session (for production)."""
+        try:
+            response = auth_session.post(
+                f"{self.search_service_url}/search",
+                json={"query": query, "limit": 5},
+                timeout=30.0
+            )
+            response.raise_for_status()
+            result = response.json()
+            return result.get("result", [])
+        except Exception as e:
+            print(f"Error calling search service with auth session: {str(e)}")
             return []
 
     async def _search_node(self, state: AgentState) -> AgentState:
