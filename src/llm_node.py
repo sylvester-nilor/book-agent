@@ -1,11 +1,11 @@
 import os
 from typing import List, Dict, Any, Optional
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 import google.auth
 
-from utils.auth import get_auth_token, get_auth_session
+from auth import get_auth_token, get_auth_session
+from search_tool import SearchTool
 
 
 class LLMNode:
@@ -21,7 +21,8 @@ class LLMNode:
             max_tokens=1000
         )
         
-        self.search_tool = self._create_search_tool()
+        search_tool_instance = SearchTool(search_service_url, auth_token)
+        self.search_tool = search_tool_instance.create_search_tool()
         
         self.system_prompt = self._create_system_prompt()
 
@@ -64,65 +65,12 @@ class LLMNode:
 
 Remember: You're having a conversation with someone who values thoughtful insights, not querying a database. Be genuinely helpful and conversational."""
 
-    def _create_search_tool(self):
-        
-        @tool
-        async def search_knowledge(query: str) -> str:
-            try:
-                import httpx
-                
-                headers = {"Content-Type": "application/json"}
-                
-                if self.auth_token:
-                    headers["Authorization"] = f"Bearer {self.auth_token}"
-                    async with httpx.AsyncClient() as client:
-                        response = await client.post(
-                            f"{self.search_service_url}/search",
-                            json={"query": query, "limit": 3},
-                            headers=headers,
-                            timeout=30.0
-                        )
-                        response.raise_for_status()
-                        result = response.json()
-                        search_results = result.get("result", [])
-                else:
-                    auth_session = self._get_auth_session()
-                    response = auth_session.post(
-                        f"{self.search_service_url}/search",
-                        json={"query": query, "limit": 3},
-                        timeout=30.0
-                    )
-                    response.raise_for_status()
-                    result = response.json()
-                    search_results = result.get("result", [])
-                
-                if not search_results:
-                    return "No relevant insights found in the knowledge base."
-                
-                formatted_results = []
-                for result in search_results:
-                    book_id = result.get("book_id", "Unknown")
-                    content = result.get("content", "")
-                    page = result.get("page_number", "")
-                    
-                    if page:
-                        formatted_results.append(f"From {book_id} (page {page}): {content}")
-                    else:
-                        formatted_results.append(f"From {book_id}: {content}")
-                
-                return "\n\n".join(formatted_results)
-                
-            except Exception as e:
-                return f"Error searching knowledge base: {str(e)}"
-        
-        return search_knowledge
-
     def _get_auth_session(self):
         if self._auth_session is None:
             self._auth_session = get_auth_session()
         return self._auth_session
 
-    async def process_message(self, user_message: str, conversation_history: Optional[List[Dict[str, Any]]] = None) -> str:
+    def process_message(self, user_message: str, conversation_history: Optional[List[Dict[str, Any]]] = None) -> str:
         try:
             messages = [SystemMessage(content=self.system_prompt)]
             
@@ -137,7 +85,7 @@ Remember: You're having a conversation with someone who values thoughtful insigh
             
             llm_with_tools = self.llm.bind_tools([self.search_tool])
             
-            response = await llm_with_tools.ainvoke(messages)
+            response = llm_with_tools.invoke(messages)
             
             return response.content
             
@@ -147,38 +95,33 @@ Remember: You're having a conversation with someone who values thoughtful insigh
 
 
 if __name__ == "__main__":
-    import asyncio
+    search_service_url = os.getenv("SEARCH_SERVICE_URL", "https://search-v1-959508709789.us-central1.run.app")
+    auth_token = get_auth_token()
     
-    async def test_llm_node():
-        search_service_url = os.getenv("SEARCH_SERVICE_URL", "https://search-v1-959508709789.us-central1.run.app")
-        auth_token = get_auth_token()
-        
-        llm_node = LLMNode(search_service_url, auth_token)
-        
-        print("🤖 Testing LLM Node with proactive knowledge search")
-        print()
-        
-        print("=== Test 1: Creative Block ===")
-        response1 = await llm_node.process_message("I've been working on an art project and got blocked")
-        print(f"User: I've been working on an art project and got blocked")
-        print(f"Agent: {response1}")
-        print()
-        
-        print("=== Test 2: Startup Decision-Making ===")
-        response2 = await llm_node.process_message("My startup is struggling with decision-making as we grow")
-        print(f"User: My startup is struggling with decision-making as we grow")
-        print(f"Agent: {response2}")
-        print()
-        
-        print("=== Test 3: General Conversation ===")
-        response3 = await llm_node.process_message("I'm thinking about learning something new")
-        print(f"User: I'm thinking about learning something new")
-        print(f"Agent: {response3}")
-        print()
-        
-        print("=== Test 4: Personal Challenge ===")
-        response4 = await llm_node.process_message("I'm feeling overwhelmed with all my commitments lately")
-        print(f"User: I'm feeling overwhelmed with all my commitments lately")
-        print(f"Agent: {response4}")
+    llm_node = LLMNode(search_service_url, auth_token)
     
-    asyncio.run(test_llm_node())
+    print("🤖 Testing LLM Node with proactive knowledge search")
+    print()
+    
+    print("=== Test 1: Creative Block ===")
+    response1 = llm_node.process_message("I've been working on an art project and got blocked")
+    print(f"User: I've been working on an art project and got blocked")
+    print(f"Agent: {response1}")
+    print()
+    
+    print("=== Test 2: Startup Decision-Making ===")
+    response2 = llm_node.process_message("My startup is struggling with decision-making as we grow")
+    print(f"User: My startup is struggling with decision-making as we grow")
+    print(f"Agent: {response2}")
+    print()
+    
+    print("=== Test 3: General Conversation ===")
+    response3 = llm_node.process_message("I'm thinking about learning something new")
+    print(f"User: I'm thinking about learning something new")
+    print(f"Agent: {response3}")
+    print()
+    
+    print("=== Test 4: Personal Challenge ===")
+    response4 = llm_node.process_message("I'm feeling overwhelmed with all my commitments lately")
+    print(f"User: I'm feeling overwhelmed with all my commitments lately")
+    print(f"Agent: {response4}")

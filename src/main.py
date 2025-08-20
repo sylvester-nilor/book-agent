@@ -16,12 +16,12 @@ class ChatResponse(BaseModel):
 
 
 @app.get("/")
-async def health_check():
+def health_check():
     return {"status": "healthy", "service": "book-agent"}
 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest):
+def chat_endpoint(request: ChatRequest):
     try:
         project_id = os.getenv("GCP_PROJECT", "robot-rnd-nilor-gcp")
         search_service_url = os.getenv("SEARCH_SERVICE_URL", "https://search-v1-959508709789.us-central1.run.app")
@@ -33,7 +33,7 @@ async def chat_endpoint(request: ChatRequest):
             auth_token=auth_token
         )
         
-        response = await service.chat(
+        response = service.chat(
             message=request.message,
             thread_id=request.thread_id
         )

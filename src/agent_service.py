@@ -1,15 +1,12 @@
 import os
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, END
 
-import sys
-import os
-sys.path.insert(0, os.path.dirname(__file__))
-from models.agent_state import AgentState
-from nodes.llm_node import LLMNode
-from utils.auth import get_auth_token
+from agent_state import AgentState
+from llm_node import LLMNode
+from auth import get_auth_token
 
 
 class AgentService:
@@ -33,12 +30,12 @@ class AgentService:
 
         return workflow.compile(checkpointer=self.memory_saver)
 
-    async def _llm_node(self, state: AgentState) -> AgentState:
+    def _llm_node(self, state: AgentState) -> AgentState:
         messages = state["messages"]
         last_message = messages[-1]
 
         if isinstance(last_message, HumanMessage):
-            response_content = await self.llm_node.process_message(
+            response_content = self.llm_node.process_message(
                 user_message=last_message.content,
                 conversation_history=self._get_conversation_history(messages[:-1])
             )
@@ -57,12 +54,12 @@ class AgentService:
                 history.append({"role": "assistant", "content": msg.content})
         return history
 
-    async def chat(self, message: str, thread_id: str) -> str:
+    def chat(self, message: str, thread_id: str) -> str:
         try:
             config = {"configurable": {"thread_id": thread_id}}
 
             try:
-                existing_state = await self.agent.aget_state(config)
+                existing_state = self.agent.get_state(config)
                 if existing_state:
                     existing_messages = existing_state["messages"]
                     existing_messages.append(HumanMessage(content=message))
@@ -81,7 +78,7 @@ class AgentService:
                     "search_results": None
                 }
 
-            result = await self.agent.ainvoke(initial_state, config=config)
+            result = self.agent.invoke(initial_state, config=config)
 
             messages = result["messages"]
             if messages and isinstance(messages[-1], AIMessage):
@@ -95,41 +92,36 @@ class AgentService:
 
 
 if __name__ == "__main__":
-    import asyncio
+    project_id = os.getenv("GCP_PROJECT", "robot-rnd-nilor-gcp")
+    search_service_url = os.getenv("SEARCH_SERVICE_URL", "https://search-v1-959508709789.us-central1.run.app")
+    auth_token = get_auth_token()
 
-    async def test_conversation():
-        project_id = os.getenv("GCP_PROJECT", "robot-rnd-nilor-gcp")
-        search_service_url = os.getenv("SEARCH_SERVICE_URL", "https://search-v1-959508709789.us-central1.run.app")
-        auth_token = get_auth_token()
+    service = AgentService(
+        project_id=project_id,
+        search_service_url=search_service_url,
+        auth_token=auth_token
+    )
 
-        service = AgentService(
-            project_id=project_id,
-            search_service_url=search_service_url,
-            auth_token=auth_token
-        )
-
-        thread_id = "test-proactive-agent-123"
-        
-        print("=== Testing Proactive Knowledge Agent ===")
-        
-        print("\n--- Test 1: Creative Block ---")
-        response1 = await service.chat("I've been working on an art project and got blocked", thread_id)
-        print(f"User: I've been working on an art project and got blocked")
-        print(f"Agent: {response1}")
-        
-        print("\n--- Test 2: Startup Decision-Making ---")
-        response2 = await service.chat("My startup is struggling with decision-making as we grow", thread_id)
-        print(f"User: My startup is struggling with decision-making as we grow")
-        print(f"Agent: {response2}")
-        
-        print("\n--- Test 3: General Conversation ---")
-        response3 = await service.chat("I'm thinking about learning something new", thread_id)
-        print(f"User: I'm thinking about learning something new")
-        print(f"Agent: {response3}")
-        
-        print("\n--- Test 4: Personal Challenge ---")
-        response4 = await service.chat("I'm feeling overwhelmed with all my commitments lately", thread_id)
-        print(f"User: I'm feeling overwhelmed with all my commitments lately")
-        print(f"Agent: {response4}")
-
-    asyncio.run(test_conversation())
+    thread_id = "test-proactive-agent-123"
+    
+    print("=== Testing Proactive Knowledge Agent ===")
+    
+    print("\n--- Test 1: Creative Block ---")
+    response1 = service.chat("I've been working on an art project and got blocked", thread_id)
+    print(f"User: I've been working on an art project and got blocked")
+    print(f"Agent: {response1}")
+    
+    print("\n--- Test 2: Startup Decision-Making ---")
+    response2 = service.chat("My startup is struggling with decision-making as we grow", thread_id)
+    print(f"User: My startup is struggling with decision-making as we grow")
+    print(f"Agent: {response2}")
+    
+    print("\n--- Test 3: General Conversation ---")
+    response3 = service.chat("I'm thinking about learning something new", thread_id)
+    print(f"User: I'm thinking about learning something new")
+    print(f"Agent: {response3}")
+    
+    print("\n--- Test 4: Personal Challenge ---")
+    response4 = service.chat("I'm feeling overwhelmed with all my commitments lately", thread_id)
+    print(f"User: I'm feeling overwhelmed with all my commitments lately")
+    print(f"Agent: {response4}")
