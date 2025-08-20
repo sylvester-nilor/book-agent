@@ -8,8 +8,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(__file__))
 from models.agent_state import AgentState
-from nodes.search_node import SearchNode
-from nodes.respond_node import RespondNode
+from nodes.llm_node import LLMNode
 from utils.auth import get_auth_token
 
 
@@ -20,92 +19,51 @@ class AgentService:
         self.auth_token = auth_token
         self.memory_saver = MemorySaver()
         
-        # Initialize nodes
-        self.search_node = SearchNode(search_service_url, auth_token)
-        self.respond_node = RespondNode()
+        self.llm_node = LLMNode(search_service_url, auth_token)
         
-        # Build agent
         self.agent = self._build_agent()
 
     def _build_agent(self):
-        """Build the LangGraph agent workflow."""
         workflow = StateGraph(AgentState)
 
-        # Add nodes
-        workflow.add_node("search", self._search_node)
-        workflow.add_node("respond", self._respond_node)
+        workflow.add_node("llm", self._llm_node)
 
-        # Set entry point and edges
-        workflow.set_entry_point("search")
-        workflow.add_edge("search", "respond")
-        workflow.add_edge("respond", END)
+        workflow.set_entry_point("llm")
+        workflow.add_edge("llm", END)
 
         return workflow.compile(checkpointer=self.memory_saver)
 
-    async def _search_node(self, state: AgentState) -> AgentState:
-        """Node that performs search."""
+    async def _llm_node(self, state: AgentState) -> AgentState:
         messages = state["messages"]
         last_message = messages[-1]
 
         if isinstance(last_message, HumanMessage):
-            # Check if this is a simple greeting/thanks/goodbye
-            query_lower = last_message.content.lower()
-            
-            if any(word in query_lower for word in ["hello", "hi", "hey"]):
-                # Skip search for greetings
-                return {"messages": messages, "search_results": []}
-            
-            if any(word in query_lower for word in ["thank", "thanks"]):
-                # Skip search for thanks
-                return {"messages": messages, "search_results": []}
-            
-            if any(word in query_lower for word in ["goodbye", "bye", "see you"]):
-                # Skip search for goodbyes
-                return {"messages": messages, "search_results": []}
-            
-            # Perform search for other queries
-            search_results = await self.search_node.search(last_message.content)
-            return {"messages": messages, "search_results": search_results}
-
-        return {"messages": messages, "search_results": []}
-
-    async def _respond_node(self, state: AgentState) -> AgentState:
-        """Node that generates the response."""
-        messages = state["messages"]
-        search_results = state.get("search_results", []) or []
-
-        last_message = messages[-1]
-        if isinstance(last_message, HumanMessage):
-            # Generate appropriate response based on message type
-            query_lower = last_message.content.lower()
-            
-            if any(word in query_lower for word in ["hello", "hi", "hey"]):
-                response_content = self.respond_node.generate_greeting_response(last_message.content)
-            elif any(word in query_lower for word in ["thank", "thanks"]):
-                response_content = self.respond_node.generate_thanks_response(last_message.content)
-            elif any(word in query_lower for word in ["goodbye", "bye", "see you"]):
-                response_content = self.respond_node.generate_goodbye_response(last_message.content)
-            elif search_results:
-                response_content = self.respond_node.generate_response(last_message.content, search_results)
-            else:
-                response_content = self.respond_node.generate_fallback_response(last_message.content)
+            response_content = await self.llm_node.process_message(
+                user_message=last_message.content,
+                conversation_history=self._get_conversation_history(messages[:-1])
+            )
 
             ai_message = AIMessage(content=response_content)
             messages.append(ai_message)
 
-        return {"messages": messages, "search_results": search_results}
+        return {"messages": messages, "search_results": None}
+
+    def _get_conversation_history(self, messages) -> list:
+        history = []
+        for msg in messages:
+            if isinstance(msg, HumanMessage):
+                history.append({"role": "user", "content": msg.content})
+            elif isinstance(msg, AIMessage):
+                history.append({"role": "assistant", "content": msg.content})
+        return history
 
     async def chat(self, message: str, thread_id: str) -> str:
-        """Main chat method that handles the conversation."""
         try:
             config = {"configurable": {"thread_id": thread_id}}
 
-            # Get existing state or create new one
             try:
-                # Try to get existing state from checkpoint
                 existing_state = await self.agent.aget_state(config)
                 if existing_state:
-                    # Add new message to existing conversation
                     existing_messages = existing_state["messages"]
                     existing_messages.append(HumanMessage(content=message))
                     initial_state = {
@@ -113,13 +71,11 @@ class AgentService:
                         "messages": existing_messages
                     }
                 else:
-                    # Create new state
                     initial_state = {
                         "messages": [HumanMessage(content=message)],
                         "search_results": None
                     }
             except Exception:
-                # If no existing state, create new one
                 initial_state = {
                     "messages": [HumanMessage(content=message)],
                     "search_results": None
@@ -152,28 +108,28 @@ if __name__ == "__main__":
             auth_token=auth_token
         )
 
-        # Test conversation
-        thread_id = "test-conversation-123"
+        thread_id = "test-proactive-agent-123"
         
-        print("=== Testing full conversation ===")
+        print("=== Testing Proactive Knowledge Agent ===")
         
-        # Test greeting
-        response1 = await service.chat("Hello!", thread_id)
-        print(f"Greeting: {response1}")
-        print()
+        print("\n--- Test 1: Creative Block ---")
+        response1 = await service.chat("I've been working on an art project and got blocked", thread_id)
+        print(f"User: I've been working on an art project and got blocked")
+        print(f"Agent: {response1}")
         
-        # Test search query
-        response2 = await service.chat("What is digital sovereignty?", thread_id)
-        print(f"Search query: {response2}")
-        print()
+        print("\n--- Test 2: Startup Decision-Making ---")
+        response2 = await service.chat("My startup is struggling with decision-making as we grow", thread_id)
+        print(f"User: My startup is struggling with decision-making as we grow")
+        print(f"Agent: {response2}")
         
-        # Test follow-up
-        response3 = await service.chat("How does it relate to network states?", thread_id)
-        print(f"Follow-up: {response3}")
-        print()
+        print("\n--- Test 3: General Conversation ---")
+        response3 = await service.chat("I'm thinking about learning something new", thread_id)
+        print(f"User: I'm thinking about learning something new")
+        print(f"Agent: {response3}")
         
-        # Test thanks
-        response4 = await service.chat("Thank you!", thread_id)
-        print(f"Thanks: {response4}")
+        print("\n--- Test 4: Personal Challenge ---")
+        response4 = await service.chat("I'm feeling overwhelmed with all my commitments lately", thread_id)
+        print(f"User: I'm feeling overwhelmed with all my commitments lately")
+        print(f"Agent: {response4}")
 
     asyncio.run(test_conversation())

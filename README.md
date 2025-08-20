@@ -1,80 +1,70 @@
-# Book Agent - Modular RAG Agent
+# Book Agent - Proactive Knowledge Agent
 
-A conversational RAG (Retrieval-Augmented Generation) agent that searches through books and provides natural, cited responses.
+A conversational AI agent that proactively enriches natural conversations with relevant insights from a knowledge base. The agent engages in genuine dialogue while intelligently searching for and weaving in relevant knowledge when it could add value to the conversation.
 
 ## Architecture
 
-The agent is built with a clean modular structure for easy development and testing:
+The agent uses a simplified single-node architecture for natural conversation flow:
 
 ```
 src/
-├── agent_service.py          # Main service + full conversation testing
+├── agent_service.py          # Main service with LangGraph workflow
 ├── nodes/
-│   ├── search_node.py        # Search logic + search testing
-│   └── respond_node.py       # Response generation + response testing
+│   └── llm_node.py          # Single LLM node with search tool integration
 ├── models/
-│   └── agent_state.py        # AgentState TypedDict definition
+│   └── agent_state.py       # AgentState TypedDict definition
 └── utils/
-    └── auth.py               # Authentication helpers + auth testing
-tests/                        # Test files
+    └── auth.py              # Authentication helpers
+tests/                       # Test files
 ├── test_agent.py
 └── test_multi_turn.py
 ```
 
 ## Features
 
-- **Natural Conversation**: Handles greetings, thanks, goodbyes without searching
-- **Smart Search**: Searches books for relevant content when needed
-- **Natural Citations**: Cites books naturally ("According to The Network State...")
+- **Proactive Knowledge Search**: Intelligently searches for relevant insights when they could enhance the conversation
+- **Natural Conversation Flow**: Engages in genuine dialogue without forcing search results
+- **Contextual Intelligence**: Decides when to search based on conversational context, not user requests
 - **Conversation Persistence**: Maintains conversation state across turns
-- **Modular Design**: Each component can be tested independently
+- **Seamless Integration**: Weaves knowledge naturally into responses without academic citations
 
 ## Development Workflow
 
 ### Quick Testing
 
-Test each component in isolation:
+Test the proactive knowledge agent:
 
 ```bash
-# Test search functionality
-python src/nodes/search_node.py
-
-# Test response generation
-python src/nodes/respond_node.py
-
-# Test authentication
-python src/utils/auth.py
+# Test the LLM node with proactive search
+cd src && uv run python nodes/llm_node.py
 
 # Test full agent conversation
-python src/agent_service.py
+cd src && uv run python agent_service.py
 
 # Test from tests directory
-python tests/test_agent.py
+cd src && uv run pytest
 ```
 
 ### Component Details
 
-#### Search Node (`nodes/search_node.py`)
-- Makes HTTP calls to search service
-- Handles authentication (token or ADC)
-- Returns structured search results
-
-#### Respond Node (`nodes/respond_node.py`)
-- Generates conversational responses
-- Creates natural citations
-- Handles different message types (greeting, thanks, search results)
+#### LLM Node (`nodes/llm_node.py`)
+- Single LLM agent with integrated search tool
+- Proactive knowledge search based on conversational context
+- Natural conversation flow with intelligent search integration
+- Comprehensive system prompt for proactive behavior
 
 #### Agent Service (`agent_service.py`)
-- Orchestrates the LangGraph workflow
-- Manages conversation state
-- Routes messages to appropriate handlers
+- Simplified LangGraph workflow with single LLM node
+- Manages conversation state and persistence
+- Handles natural conversation with proactive knowledge enrichment
 
 ## Usage
 
-The agent provides a simple chat interface:
+The agent provides a conversational interface that proactively enriches discussions:
 
 ```python
-from src.agent_service import AgentService
+# From the src directory
+from agent_service import AgentService
 
 service = AgentService(
     project_id="your-project",
@@ -82,11 +72,22 @@ service = AgentService(
     auth_token="your-auth-token"
 )
 
+# The agent will proactively search for relevant insights when helpful
 response = await service.chat(
-    message="What is digital sovereignty?",
+    message="I've been working on an art project and got blocked",
     thread_id="conversation-123"
 )
 ```
+
+## Example Interactions
+
+- **User**: "I've been working on an art project and got blocked"
+- **Agent**: *searches "creative blocks art inspiration"* then responds conversationally with relevant insights about creativity/constraints
+
+- **User**: "My startup is struggling with decision-making as we grow"
+- **Agent**: *searches "organizational decision making scaling"* then weaves relevant concepts naturally into helpful conversation
+
+The agent feels like talking to someone who's well-read and thoughtful, not like querying a database.
 
 ## Environment Variables
 
@@ -96,11 +97,10 @@ response = await service.chat(
 
 ## Testing
 
-Each component has built-in smoke tests that run when executed directly:
+The agent includes comprehensive testing for proactive knowledge behavior:
 
-- **Search Node**: Tests search with sample query
-- **Respond Node**: Tests response generation with mock data
-- **Auth Utils**: Tests token retrieval
-- **Agent Service**: Tests full conversation flow
+- **LLM Node**: Tests proactive search integration with various conversation scenarios
+- **Agent Service**: Tests full conversation flow with proactive knowledge enrichment
+- **Built-in Tests**: Run when executed directly to verify proactive behavior
 
-This modular structure makes it easy to iterate on individual components without the complexity of the full system.
+The simplified architecture focuses on natural conversation flow with intelligent knowledge integration.
