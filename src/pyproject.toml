@@ -8,7 +8,7 @@ packages = ["src"]
 [project]
 name = "book-agent"
 version = "0.1.0"
-description = "Search a store for relevant data"
+description = "Book Agent with LangGraph and Firestore"
 authors = [
     {name = "Sylvester Meighan", email = "sylvester@nilor.cool"},
 ]
@@ -22,9 +22,13 @@ dependencies = [
     "google-api-python-client==2.137.0",
     "google-cloud-bigquery[bqstorage,pandas]==3.21.0",
     "google-cloud-storage==2.18.2",
+    "google-cloud-firestore>=2.13.0",
+    "langgraph>=0.2.0",
+    "langchain>=0.2.0",
+    "langchain-google-firestore>=0.1.0",
+    "httpx>=0.25.0",
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
-    "httpx>=0.25.0",
 ]
 
 [project.optional-dependencies]
