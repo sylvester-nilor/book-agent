@@ -1,12 +1,18 @@
 import os
-from typing import Optional, List, Dict, Any
+from typing import List, Dict, Any, Optional, TypedDict, Annotated
+
+from langchain_core.messages import BaseMessage
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, END
 
-from agent_state import AgentState
-from llm_node import LLMNode
 from auth import get_auth_token
+from llm_node import LLMNode
+
+
+class AgentState(TypedDict):
+    messages: Annotated[List[BaseMessage], "The messages in the conversation"]
+    search_results: Annotated[Optional[List[Dict[str, Any]]], "Results from search tool"]
 
 
 class AgentService:
@@ -15,9 +21,9 @@ class AgentService:
         self.search_service_url = search_service_url
         self.auth_token = auth_token
         self.memory_saver = MemorySaver()
-        
+
         self.llm_node = LLMNode(search_service_url, auth_token)
-        
+
         self.agent = self._build_agent()
 
     def _build_agent(self):
@@ -103,24 +109,24 @@ if __name__ == "__main__":
     )
 
     thread_id = "test-proactive-agent-123"
-    
+
     print("=== Testing Proactive Knowledge Agent ===")
-    
+
     print("\n--- Test 1: Creative Block ---")
     response1 = service.chat("I've been working on an art project and got blocked", thread_id)
     print(f"User: I've been working on an art project and got blocked")
     print(f"Agent: {response1}")
-    
+
     print("\n--- Test 2: Startup Decision-Making ---")
     response2 = service.chat("My startup is struggling with decision-making as we grow", thread_id)
     print(f"User: My startup is struggling with decision-making as we grow")
     print(f"Agent: {response2}")
-    
+
     print("\n--- Test 3: General Conversation ---")
     response3 = service.chat("I'm thinking about learning something new", thread_id)
     print(f"User: I'm thinking about learning something new")
     print(f"Agent: {response3}")
-    
+
     print("\n--- Test 4: Personal Challenge ---")
     response4 = service.chat("I'm feeling overwhelmed with all my commitments lately", thread_id)
     print(f"User: I'm feeling overwhelmed with all my commitments lately")

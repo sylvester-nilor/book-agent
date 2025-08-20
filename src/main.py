@@ -26,13 +26,13 @@ def chat_endpoint(request: ChatRequest):
         project_id = os.getenv("GCP_PROJECT", "robot-rnd-nilor-gcp")
         search_service_url = os.getenv("SEARCH_SERVICE_URL", "https://search-v1-959508709789.us-central1.run.app")
         auth_token = os.getenv("AUTH_TOKEN")
-        
+
         service = AgentService(
             project_id=project_id,
             search_service_url=search_service_url,
             auth_token=auth_token
         )
-        
+
         response = service.chat(
             message=request.message,
             thread_id=request.thread_id
