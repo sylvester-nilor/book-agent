@@ -79,7 +79,7 @@ class AgentService:
             model=self.llm,
             tools=tools,
             checkpointer=self.memory_saver,
-            state_modifier=system_message
+            prompt=system_message
         )
 
     def _get_auth_session(self) -> AuthorizedSession:
