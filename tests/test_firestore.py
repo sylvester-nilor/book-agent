@@ -5,9 +5,9 @@ Test script to check Firestore connectivity and data.
 
 import os
 import asyncio
-from google.cloud import firestore
+from google.cloud import firestore_v1 as firestore
 
-async def test_firestore():
+def test_firestore():
     """Test Firestore connectivity and check for conversation data."""
     project_id = os.getenv("GCP_PROJECT", "robot-rnd-nilor-gcp")
     
@@ -44,4 +44,4 @@ async def test_firestore():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    asyncio.run(test_firestore())
+    test_firestore()

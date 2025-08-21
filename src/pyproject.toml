@@ -24,6 +24,8 @@ dependencies = [
     "langchain-google-vertexai>=2.0.0",
     "httpx>=0.25.0",
     "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "google-cloud-firestore>=2.0.0",
 ]
 
 [project.optional-dependencies]

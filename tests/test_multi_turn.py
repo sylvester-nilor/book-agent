@@ -3,7 +3,7 @@ import subprocess
 import os
 from agent_service import AgentService
 
-async def test_multi_turn():
+def test_multi_turn():
     project_id = os.getenv("GCP_PROJECT", "robot-rnd-nilor-gcp")
     search_service_url = os.getenv("SEARCH_SERVICE_URL", "https://search-v1-959508709789.us-central1.run.app")
 
@@ -22,15 +22,14 @@ async def test_multi_turn():
     service = AgentService(
         project_id=project_id,
         search_service_url=search_service_url,
-        auth_token=auth_token,
-        max_turns=3
+        auth_token=auth_token
     )
 
     # Test multi-turn conversation
     thread_id = "test-multi-turn-123"
     
     print("=== Turn 1: Initial Question ===")
-    response1 = await service.chat(
+    response1 = service.chat(
         message="What is digital sovereignty?",
         thread_id=thread_id
     )
@@ -38,7 +37,7 @@ async def test_multi_turn():
     print()
 
     print("=== Turn 2: Follow-up Question ===")
-    response2 = await service.chat(
+    response2 = service.chat(
         message="How does it relate to network states?",
         thread_id=thread_id
     )
@@ -46,7 +45,7 @@ async def test_multi_turn():
     print()
 
     print("=== Turn 3: Another Follow-up ===")
-    response3 = await service.chat(
+    response3 = service.chat(
         message="Can you explain more about limited sovereignty?",
         thread_id=thread_id
     )
@@ -54,11 +53,11 @@ async def test_multi_turn():
     print()
 
     print("=== Turn 4: Should hit max turns ===")
-    response4 = await service.chat(
+    response4 = service.chat(
         message="What about the governance aspects?",
         thread_id=thread_id
     )
     print(f"Response: {response4}")
 
 if __name__ == "__main__":
-    asyncio.run(test_multi_turn())
+    test_multi_turn()
