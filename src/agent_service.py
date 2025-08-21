@@ -4,7 +4,7 @@ from typing import List, Optional, TypedDict, Annotated
 import google.auth
 from google.auth.transport.requests import AuthorizedSession, Request
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_vertexai import ChatVertexAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 
@@ -62,10 +62,8 @@ class AgentService:
         self.memory_saver = MemorySaver()
         self._auth_session = None
 
-        credentials, _ = google.auth.default()
-        self.llm = ChatGoogleGenerativeAI(
+        self.llm = ChatVertexAI(
             model="gemini-2.0-flash-exp",
-            google_api_key=None,
             temperature=0.7,
             max_tokens=1000
         )

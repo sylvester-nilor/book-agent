@@ -31,6 +31,18 @@ resource "google_project_service" "enable_storage" {
   service = "storage.googleapis.com"
 }
 
+resource "google_project_service" "enable_generative_ai" {
+  project = var.project_id
+  service = "generativelanguage.googleapis.com"
+}
+
+resource "google_project_service" "enable_vertex_ai" {
+  project = var.project_id
+  service = "aiplatform.googleapis.com"
+}
+
+
+
 # -------------------------------------------------------------------------
 # Service Account: Schedule Job
 # -------------------------------------------------------------------------
@@ -67,7 +79,9 @@ resource "google_service_account" "cloud_run_app_sa" {
     google_project_service.enable_firestore,
     google_project_service.enable_cloud_run,
     google_project_service.enable_bigquery,
-    google_project_service.enable_storage
+    google_project_service.enable_storage,
+    google_project_service.enable_generative_ai,
+    google_project_service.enable_vertex_ai
   ]
 }
 
@@ -107,6 +121,12 @@ resource "google_project_iam_member" "pipeline_sa_paragraph_embedding_connection
 resource "google_project_iam_member" "pipeline_sa_firestore" {
   project = var.project_id
   role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.cloud_run_app_sa.email}"
+}
+
+resource "google_project_iam_member" "pipeline_sa_generative_ai" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
   member  = "serviceAccount:${google_service_account.cloud_run_app_sa.email}"
 }
 
@@ -424,5 +444,11 @@ resource "google_cloud_run_service" "cloud_run_app" {
     latest_revision = true
   }
 }
+
+# -------------------------------------------------------------------------
+# Outputs
+# -------------------------------------------------------------------------
+
+
 
 
