@@ -123,17 +123,17 @@ if __name__ == "__main__":
 
     print("=== Testing Proactive Knowledge Agent ===")
 
-    print("\n--- Test 1: Creative Block ---")
-    response1 = service.chat("I've been working on an art project and got blocked", thread_id)
-    print(f"User: I've been working on an art project and got blocked")
+    print("\n--- Test 1: Force RAG Usage ---")
+    response1 = service.chat("Please search your knowledge base for information about digital sovereignty and tell me what you find", thread_id)
+    print(f"User: Please search your knowledge base for information about digital sovereignty and tell me what you find")
     print(f"Agent: {response1}")
 
-    print("\n--- Test 2: Startup Decision-Making ---")
-    response2 = service.chat("My startup is struggling with decision-making as we grow", thread_id)
-    print(f"User: My startup is struggling with decision-making as we grow")
+    print("\n--- Test 2: Creative Block with RAG ---")
+    response2 = service.chat("I'm feeling stuck on a creative project. Can you search your knowledge base for insights about creative blocks and motivation?", thread_id)
+    print(f"User: I'm feeling stuck on a creative project. Can you search your knowledge base for insights about creative blocks and motivation?")
     print(f"Agent: {response2}")
 
-    print("\n--- Test 3: General Conversation ---")
-    response3 = service.chat("I'm thinking about learning something new", thread_id)
-    print(f"User: I'm thinking about learning something new")
+    print("\n--- Test 3: Decision Making with RAG ---")
+    response3 = service.chat("My team is struggling with decision-making. Please search your knowledge base for insights about organizational decision-making and leadership", thread_id)
+    print(f"User: My team is struggling with decision-making. Please search your knowledge base for insights about organizational decision-making and leadership")
     print(f"Agent: {response3}")
