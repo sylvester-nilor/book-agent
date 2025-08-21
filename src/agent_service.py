@@ -55,10 +55,9 @@ class AgentState(TypedDict):
 
 
 class AgentService:
-    def __init__(self, project_id: str, search_service_url: str, auth_token: Optional[str] = None):
+    def __init__(self, project_id: str, search_service_url: str):
         self.project_id = project_id
         self.search_service_url = search_service_url
-        self.auth_token = auth_token
         self.memory_saver = MemorySaver()
         self._auth_session = None
 
@@ -69,7 +68,7 @@ class AgentService:
         )
 
         from tool_search import create_search_tool
-        tools = [create_search_tool(self.search_service_url, self.auth_token)]
+        tools = [create_search_tool(self.search_service_url)]
 
         system_message = SystemMessage(content=get_system_prompt())
 
@@ -111,12 +110,10 @@ class AgentService:
 if __name__ == "__main__":
     project_id = os.getenv("GCP_PROJECT", "robot-rnd-nilor-gcp")
     search_service_url = os.getenv("SEARCH_SERVICE_URL", "https://search-v1-959508709789.us-central1.run.app")
-    auth_token = get_auth_token()
 
     service = AgentService(
         project_id=project_id,
-        search_service_url=search_service_url,
-        auth_token=auth_token
+        search_service_url=search_service_url
     )
 
     thread_id = "test-proactive-agent-123"

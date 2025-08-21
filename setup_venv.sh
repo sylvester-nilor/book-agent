@@ -21,6 +21,16 @@ cd ..
 echo "Setting up PYTHONPATH..."
 export PYTHONPATH=src
 
+echo "Setting up application-default credentials..."
+if ! gcloud auth application-default print-access-token &> /dev/null; then
+    echo "Application-default credentials not set up. Please run:"
+    echo "gcloud auth application-default login"
+    echo ""
+    echo "This is needed for local development to access BigQuery/Firestore."
+else
+    echo "Application-default credentials are set up."
+fi
+
 echo "Development environment setup complete!"
 echo ""
 echo "To activate the environment, run:"

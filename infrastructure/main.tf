@@ -445,6 +445,24 @@ resource "google_cloud_run_service" "cloud_run_app" {
   }
 }
 
+# Allow the book-agent service account to invoke the search service
+resource "google_cloud_run_service_iam_member" "book_agent_search_invoker" {
+  project  = var.project_id
+  location = var.region
+  service  = "search-v1"
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.cloud_run_app_sa.email}"
+}
+
+# Allow specific developers to test the book-agent service directly
+resource "google_cloud_run_service_iam_member" "developer_access" {
+  project  = var.project_id
+  location = var.region
+  service  = google_cloud_run_service.cloud_run_app.name
+  role     = "roles/run.invoker"
+  member   = "user:sylvester@nilor.cool"
+}
+
 # -------------------------------------------------------------------------
 # Outputs
 # -------------------------------------------------------------------------

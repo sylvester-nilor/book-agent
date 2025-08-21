@@ -1,38 +1,32 @@
 import os
 from langchain_core.tools import tool
 import httpx
-from auth import get_auth_session
+import google.auth.transport.requests
+import google.oauth2.id_token
 
 
-def create_search_tool(search_service_url: str, auth_token: str = None):
+def create_search_tool(search_service_url: str):
     @tool
     def search_knowledge(query: str) -> str:
         """Search the knowledge base for relevant insights and information."""
         try:
-            headers = {"Content-Type": "application/json"}
-
-            if auth_token:
-                headers["Authorization"] = f"Bearer {auth_token}"
-                with httpx.Client() as client:
-                    response = client.post(
-                        f"{search_service_url}/search",
-                        json={"query": query, "limit": 3},
-                        headers=headers,
-                        timeout=30.0
-                    )
-                    response.raise_for_status()
-                    result = response.json()
-                    search_results = result.get("result", [])
-            else:
-                auth_session = get_auth_session()
-                response = auth_session.post(
+            id_token = os.environ.get("AUTH_TOKEN", None)
+            
+            if id_token is None:
+                auth_req = google.auth.transport.requests.Request()
+                id_token = google.oauth2.id_token.fetch_id_token(auth_req, audience=search_service_url)
+            
+            headers = {"Authorization": f"Bearer {id_token}"}
+            with httpx.Client() as client:
+                response = client.post(
                     f"{search_service_url}/search",
                     json={"query": query, "limit": 3},
+                    headers=headers,
                     timeout=30.0
                 )
-                response.raise_for_status()
-                result = response.json()
-                search_results = result.get("result", [])
+            response.raise_for_status()
+            result = response.json()
+            search_results = result.get("result", [])
 
             if not search_results:
                 return "No relevant insights found in the knowledge base."
@@ -57,14 +51,11 @@ def create_search_tool(search_service_url: str, auth_token: str = None):
 
 
 if __name__ == "__main__":
-    from auth import get_auth_token
-
     print("🔍 Testing Search Tool")
 
     _search_service_url = os.getenv("SEARCH_SERVICE_URL", "https://search-v1-959508709789.us-central1.run.app")
-    _auth_token = get_auth_token()
 
-    search_tool = create_search_tool(_search_service_url, _auth_token)
+    search_tool = create_search_tool(_search_service_url)
 
     print(f"\n--- Test 1: Digital Sovereignty ---")
     result1 = search_tool.invoke({"query": "digital sovereignty"})
