@@ -11,102 +11,15 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 
 from auth import get_auth_token
+from tool_search import search_knowledge
 
 
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], "The messages in the conversation"]
 
 
-class AgentService:
-    def __init__(self, project_id: str, search_service_url: str, auth_token: Optional[str] = None):
-        self.project_id = project_id
-        self.search_service_url = search_service_url
-        self.auth_token = auth_token
-        self.memory_saver = MemorySaver()
-        self._auth_session = None
-
-        credentials, _ = google.auth.default()
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash-exp",
-            google_api_key=None,
-            temperature=0.7,
-            max_tokens=1000
-        )
-
-        tools = [self._create_search_tool()]
-
-        # System prompt
-        system_message = SystemMessage(content=self._get_system_prompt())
-
-        # Create ReAct agent - this is the canonical LangGraph pattern
-        self.agent = create_react_agent(
-            model=self.llm,
-            tools=tools,
-            checkpointer=self.memory_saver,
-            state_modifier=system_message
-        )
-
-    def _get_auth_session(self) -> AuthorizedSession:
-        if self._auth_session is None:
-            credentials, _ = google.auth.default()
-            if not credentials.valid:
-                credentials.refresh(Request())
-            self._auth_session = AuthorizedSession(credentials)
-        return self._auth_session
-
-    def _create_search_tool(self):
-        @tool
-        def search_knowledge(query: str) -> str:
-            """Search the knowledge base for relevant insights and information."""
-            try:
-                headers = {"Content-Type": "application/json"}
-
-                if self.auth_token:
-                    headers["Authorization"] = f"Bearer {self.auth_token}"
-                    with httpx.Client() as client:
-                        response = client.post(
-                            f"{self.search_service_url}/search",
-                            json={"query": query, "limit": 3},
-                            headers=headers,
-                            timeout=30.0
-                        )
-                        response.raise_for_status()
-                        result = response.json()
-                        search_results = result.get("result", [])
-                else:
-                    auth_session = self._get_auth_session()
-                    response = auth_session.post(
-                        f"{self.search_service_url}/search",
-                        json={"query": query, "limit": 3},
-                        timeout=30.0
-                    )
-                    response.raise_for_status()
-                    result = response.json()
-                    search_results = result.get("result", [])
-
-                if not search_results:
-                    return "No relevant insights found in the knowledge base."
-
-                formatted_results = []
-                for result in search_results:
-                    book_id = result.get("book_id", "Unknown")
-                    content = result.get("content", "")
-                    page = result.get("page_number", "")
-
-                    if page:
-                        formatted_results.append(f"From {book_id} (page {page}): {content}")
-                    else:
-                        formatted_results.append(f"From {book_id}: {content}")
-
-                return "\n\n".join(formatted_results)
-
-            except Exception as e:
-                return f"Error searching knowledge base: {str(e)}"
-
-        return search_knowledge
-
-    def _get_system_prompt(self) -> str:
-        return """You are a thoughtful, well-read conversational assistant with access to a rich knowledge base. Your goal is to engage in natural, helpful conversations while proactively enriching discussions with relevant knowledge when it could add value.
+def get_system_prompt() -> str:
+    return """You are a thoughtful, well-read conversational assistant with access to a rich knowledge base. Your goal is to engage in natural, helpful conversations while proactively enriching discussions with relevant knowledge when it could add value.
 
 ## Your Approach:
 - **Engage naturally**: Have genuine conversations on any topic the user brings up
@@ -142,6 +55,42 @@ class AgentService:
 - Be genuinely helpful and thoughtful, not just informative
 
 Remember: You're having a conversation with someone who values thoughtful insights, not querying a database."""
+
+
+class AgentService:
+    def __init__(self, project_id: str, search_service_url: str, auth_token: Optional[str] = None):
+        self.project_id = project_id
+        self.search_service_url = search_service_url
+        self.auth_token = auth_token
+        self.memory_saver = MemorySaver()
+        self._auth_session = None
+
+        credentials, _ = google.auth.default()
+        self.llm = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash-exp",
+            google_api_key=None,
+            temperature=0.7,
+            max_tokens=1000
+        )
+
+        tools = [search_knowledge]
+
+        system_message = SystemMessage(content=get_system_prompt())
+
+        self.agent = create_react_agent(
+            model=self.llm,
+            tools=tools,
+            checkpointer=self.memory_saver,
+            state_modifier=system_message
+        )
+
+    def _get_auth_session(self) -> AuthorizedSession:
+        if self._auth_session is None:
+            credentials, _ = google.auth.default()
+            if not credentials.valid:
+                credentials.refresh(Request())
+            self._auth_session = AuthorizedSession(credentials)
+        return self._auth_session
 
     def chat(self, message: str, thread_id: str) -> str:
         try:
