@@ -9,11 +9,6 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 
 from auth import get_auth_token
-from tool_search import search_knowledge
-
-
-class AgentState(TypedDict):
-    messages: Annotated[List[BaseMessage], "The messages in the conversation"]
 
 
 def get_system_prompt() -> str:
@@ -55,6 +50,10 @@ def get_system_prompt() -> str:
 Remember: You're having a conversation with someone who values thoughtful insights, not querying a database."""
 
 
+class AgentState(TypedDict):
+    messages: Annotated[List[BaseMessage], "The messages in the conversation"]
+
+
 class AgentService:
     def __init__(self, project_id: str, search_service_url: str, auth_token: Optional[str] = None):
         self.project_id = project_id
@@ -71,7 +70,8 @@ class AgentService:
             max_tokens=1000
         )
 
-        tools = [search_knowledge]
+        from tool_search import create_search_tool
+        tools = [create_search_tool(self.search_service_url, self.auth_token)]
 
         system_message = SystemMessage(content=get_system_prompt())
 
