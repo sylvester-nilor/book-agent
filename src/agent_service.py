@@ -2,10 +2,8 @@ import os
 from typing import List, Optional, TypedDict, Annotated
 
 import google.auth
-import httpx
 from google.auth.transport.requests import AuthorizedSession, Request
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
-from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent

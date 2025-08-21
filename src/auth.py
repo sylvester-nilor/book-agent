@@ -5,7 +5,6 @@ from google.auth.transport.requests import AuthorizedSession, Request
 
 
 def get_auth_token() -> Optional[str]:
-    """Get authentication token from gcloud CLI."""
     try:
         auth_token = subprocess.check_output(
             ["gcloud", "auth", "print-identity-token"],
@@ -20,7 +19,6 @@ def get_auth_token() -> Optional[str]:
 
 
 def get_auth_session() -> AuthorizedSession:
-    """Get an authenticated session for calling services."""
     credentials, _ = google.auth.default()
     if not credentials.valid:
         credentials.refresh(Request())
@@ -28,7 +26,6 @@ def get_auth_session() -> AuthorizedSession:
 
 
 if __name__ == "__main__":
-    # Test auth token retrieval
     token = get_auth_token()
     if token:
         print("✅ Auth token retrieved successfully")

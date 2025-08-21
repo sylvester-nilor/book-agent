@@ -15,7 +15,6 @@ def execute_script(project_id, sql_file_path, verbose=True):
         base_path = os.path.dirname(__file__)
         sql_file_path = os.path.join(base_path, sql_file_path)
 
-    # Normalize the path
     sql_file_path = os.path.abspath(sql_file_path)
 
     print(f"{TAG} query: start. file: {sql_file_path}")
@@ -48,7 +47,7 @@ def insert_rows(project_id, dataset_id, table_id, rows, verbose=True):
     with bigquery.Client(project=project_id) as client:
         table_ref = f"{project_id}.{dataset_id}.{table_id}"
         errors = client.insert_rows_json(table_ref, rows)
-        
+
         if errors:
             print(f"{TAG} insert_rows: errors: {errors}")
             return False
