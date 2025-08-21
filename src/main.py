@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from agent_service import AgentService
 
-app = FastAPI(title="Book Agent", version="1.0.0")
+app = FastAPI(title="Knowledge Agent", version="1.0.0")
 
 
 class ChatRequest(BaseModel):
@@ -17,7 +17,7 @@ class ChatResponse(BaseModel):
 
 @app.get("/")
 def health_check():
-    return {"status": "healthy", "service": "book-agent"}
+    return {"status": "healthy", "service": "knowledge-agent"}
 
 
 @app.post("/chat", response_model=ChatResponse)

@@ -1,18 +1,20 @@
 import os
-from typing import List, Dict, Any, Optional, TypedDict, Annotated
+from typing import List, Optional, TypedDict, Annotated
 
-from langchain_core.messages import BaseMessage
-from langchain_core.messages import HumanMessage, AIMessage
+import google.auth
+import httpx
+from google.auth.transport.requests import AuthorizedSession, Request
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
+from langchain_core.tools import tool
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import create_react_agent
 
 from auth import get_auth_token
-from llm_node import LLMNode
 
 
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], "The messages in the conversation"]
-    search_results: Annotated[Optional[List[Dict[str, Any]]], "Results from search tool"]
 
 
 class AgentService:
@@ -21,70 +23,134 @@ class AgentService:
         self.search_service_url = search_service_url
         self.auth_token = auth_token
         self.memory_saver = MemorySaver()
+        self._auth_session = None
 
-        self.llm_node = LLMNode(search_service_url, auth_token)
+        credentials, _ = google.auth.default()
+        self.llm = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash-exp",
+            google_api_key=None,
+            temperature=0.7,
+            max_tokens=1000
+        )
 
-        self.agent = self._build_agent()
+        tools = [self._create_search_tool()]
 
-    def _build_agent(self):
-        workflow = StateGraph(AgentState)
+        # System prompt
+        system_message = SystemMessage(content=self._get_system_prompt())
 
-        workflow.add_node("llm", self._llm_node)
+        # Create ReAct agent - this is the canonical LangGraph pattern
+        self.agent = create_react_agent(
+            model=self.llm,
+            tools=tools,
+            checkpointer=self.memory_saver,
+            state_modifier=system_message
+        )
 
-        workflow.set_entry_point("llm")
-        workflow.add_edge("llm", END)
+    def _get_auth_session(self) -> AuthorizedSession:
+        if self._auth_session is None:
+            credentials, _ = google.auth.default()
+            if not credentials.valid:
+                credentials.refresh(Request())
+            self._auth_session = AuthorizedSession(credentials)
+        return self._auth_session
 
-        return workflow.compile(checkpointer=self.memory_saver)
+    def _create_search_tool(self):
+        @tool
+        def search_knowledge(query: str) -> str:
+            """Search the knowledge base for relevant insights and information."""
+            try:
+                headers = {"Content-Type": "application/json"}
 
-    def _llm_node(self, state: AgentState) -> AgentState:
-        messages = state["messages"]
-        last_message = messages[-1]
+                if self.auth_token:
+                    headers["Authorization"] = f"Bearer {self.auth_token}"
+                    with httpx.Client() as client:
+                        response = client.post(
+                            f"{self.search_service_url}/search",
+                            json={"query": query, "limit": 3},
+                            headers=headers,
+                            timeout=30.0
+                        )
+                        response.raise_for_status()
+                        result = response.json()
+                        search_results = result.get("result", [])
+                else:
+                    auth_session = self._get_auth_session()
+                    response = auth_session.post(
+                        f"{self.search_service_url}/search",
+                        json={"query": query, "limit": 3},
+                        timeout=30.0
+                    )
+                    response.raise_for_status()
+                    result = response.json()
+                    search_results = result.get("result", [])
 
-        if isinstance(last_message, HumanMessage):
-            response_content = self.llm_node.process_message(
-                user_message=last_message.content,
-                conversation_history=self._get_conversation_history(messages[:-1])
-            )
+                if not search_results:
+                    return "No relevant insights found in the knowledge base."
 
-            ai_message = AIMessage(content=response_content)
-            messages.append(ai_message)
+                formatted_results = []
+                for result in search_results:
+                    book_id = result.get("book_id", "Unknown")
+                    content = result.get("content", "")
+                    page = result.get("page_number", "")
 
-        return {"messages": messages, "search_results": None}
+                    if page:
+                        formatted_results.append(f"From {book_id} (page {page}): {content}")
+                    else:
+                        formatted_results.append(f"From {book_id}: {content}")
 
-    def _get_conversation_history(self, messages) -> list:
-        history = []
-        for msg in messages:
-            if isinstance(msg, HumanMessage):
-                history.append({"role": "user", "content": msg.content})
-            elif isinstance(msg, AIMessage):
-                history.append({"role": "assistant", "content": msg.content})
-        return history
+                return "\n\n".join(formatted_results)
+
+            except Exception as e:
+                return f"Error searching knowledge base: {str(e)}"
+
+        return search_knowledge
+
+    def _get_system_prompt(self) -> str:
+        return """You are a thoughtful, well-read conversational assistant with access to a rich knowledge base. Your goal is to engage in natural, helpful conversations while proactively enriching discussions with relevant knowledge when it could add value.
+
+## Your Approach:
+- **Engage naturally**: Have genuine conversations on any topic the user brings up
+- **Proactive knowledge**: When you sense that insights from your knowledge base could help, use the search_knowledge tool to find relevant concepts, themes, or ideas
+- **Weave knowledge naturally**: Integrate search results conversationally into your responses, not as lectures or formal citations
+- **Stay helpful**: Focus on being genuinely useful to the user's situation or interests
+- **Conversational flow**: Keep the conversation flowing naturally - the user doesn't know what's in your knowledge base
+
+## When to Use search_knowledge:
+- When the user shares a problem, challenge, or situation that might benefit from broader insights
+- When discussing topics that could be enriched with relevant concepts or frameworks  
+- When the user seems stuck, curious, or could benefit from a fresh perspective
+- When you sense an opportunity to share relevant knowledge that could help
+- When the conversation could benefit from deeper context or new perspectives
+
+## How to Use Search Results:
+- Don't formally cite sources - just weave insights naturally into conversation
+- Connect concepts to the user's specific situation or interests
+- Share ideas that might offer new perspectives or approaches
+- Keep responses conversational and engaging, not academic
+- Use search results to enhance your understanding, not replace your conversational skills
+
+## Examples:
+- User: "I'm feeling stuck on this project" → Use search_knowledge("creative blocks problem solving motivation")
+- User: "My team is having communication issues" → Use search_knowledge("team collaboration communication leadership")
+- User: "I'm thinking about starting something new" → Use search_knowledge("innovation new ventures risk taking")
+
+## Important:
+- You decide when to search based on conversational context
+- Don't search for every message - only when it would genuinely add value
+- If search results don't seem relevant, respond conversationally without forcing them in
+- Always maintain natural conversation flow
+- Be genuinely helpful and thoughtful, not just informative
+
+Remember: You're having a conversation with someone who values thoughtful insights, not querying a database."""
 
     def chat(self, message: str, thread_id: str) -> str:
         try:
             config = {"configurable": {"thread_id": thread_id}}
 
-            try:
-                existing_state = self.agent.get_state(config)
-                if existing_state:
-                    existing_messages = existing_state["messages"]
-                    existing_messages.append(HumanMessage(content=message))
-                    initial_state = {
-                        **existing_state,
-                        "messages": existing_messages
-                    }
-                else:
-                    initial_state = {
-                        "messages": [HumanMessage(content=message)],
-                        "search_results": None
-                    }
-            except Exception:
-                initial_state = {
-                    "messages": [HumanMessage(content=message)],
-                    "search_results": None
-                }
-
-            result = self.agent.invoke(initial_state, config=config)
+            result = self.agent.invoke(
+                {"messages": [HumanMessage(content=message)]},
+                config=config
+            )
 
             messages = result["messages"]
             if messages and isinstance(messages[-1], AIMessage):
@@ -126,8 +192,3 @@ if __name__ == "__main__":
     response3 = service.chat("I'm thinking about learning something new", thread_id)
     print(f"User: I'm thinking about learning something new")
     print(f"Agent: {response3}")
-
-    print("\n--- Test 4: Personal Challenge ---")
-    response4 = service.chat("I'm feeling overwhelmed with all my commitments lately", thread_id)
-    print(f"User: I'm feeling overwhelmed with all my commitments lately")
-    print(f"Agent: {response4}")
