@@ -46,10 +46,7 @@ resource "google_project_service" "enable_sql_admin" {
   service = "sqladmin.googleapis.com"
 }
 
-resource "google_project_service" "enable_vpc_access" {
-  project = var.project_id
-  service = "vpcaccess.googleapis.com"
-}
+
 
 # -------------------------------------------------------------------------
 # Service Account: Cloud Run Service Account
@@ -122,19 +119,7 @@ resource "google_project_iam_member" "pipeline_sa_cloudsql_client" {
   member  = "serviceAccount:${google_service_account.cloud_run_app_sa.email}"
 }
 
-# -------------------------------------------------------------------------
-# VPC Connector for Cloud SQL
-# -------------------------------------------------------------------------
 
-resource "google_vpc_access_connector" "cloud_sql_connector" {
-  project       = var.project_id
-  name          = "${var.service_name}-sql-connector"
-  region        = var.region
-  ip_cidr_range = "10.8.0.0/28"
-  network       = "default"
-
-  depends_on = [google_project_service.enable_vpc_access]
-}
 
 # -------------------------------------------------------------------------
 # PostgreSQL Database and User
@@ -149,10 +134,10 @@ resource "google_sql_database" "book_agent_db" {
   depends_on = [google_project_service.enable_sql_admin]
 }
 
-# Create IAM database user for the service account
+# Create IAM database user for the service account (without .gserviceaccount.com suffix)
 resource "google_sql_user" "book_agent_user" {
   project  = var.project_id
-  name     = google_service_account.cloud_run_app_sa.email
+  name     = replace(google_service_account.cloud_run_app_sa.email, ".gserviceaccount.com", "")
   instance = var.postgres_instance_name
   type     = "CLOUD_IAM_SERVICE_ACCOUNT"
 
@@ -323,8 +308,7 @@ resource "google_cloud_run_service" "cloud_run_app" {
 
   depends_on = [
     google_project_service.enable_cloud_run,
-    google_firestore_database.database,
-    google_vpc_access_connector.cloud_sql_connector
+    google_firestore_database.database
   ]
 
   template {
@@ -362,11 +346,6 @@ resource "google_cloud_run_service" "cloud_run_app" {
       }
       service_account_name = google_service_account.cloud_run_app_sa.email
       timeout_seconds      = 1800
-
-      # Connect to Cloud SQL via VPC connector
-      vpc_access {
-        connector = google_vpc_access_connector.cloud_sql_connector.name
-      }
     }
   }
 
