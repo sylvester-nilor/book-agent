@@ -20,13 +20,15 @@ IMAGE_TAGGED="${IMAGE_NAME}:latest"
 REBUILD=""
 
 usage() {
-  echo "Usage: $0 -b t|f | --build t|f"
+  echo "Usage: $0 -b t|f | --build t|f [-p|--plan]"
   echo "  -b, --build    Specify whether to rebuild the Docker image ('t' = yes, 'f' = no)"
+  echo "  -p, --plan     Run terraform plan instead of apply (dry run)"
   echo "  -h, --help     Display this help message"
   exit 1
 }
 
 # Parse command-line arguments
+PLAN_ONLY=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -b|--build)
@@ -44,6 +46,10 @@ while [ $# -gt 0 ]; do
         echo "Error: Argument for $1 must be 't' or 'f'."
         usage
       fi
+      ;;
+    -p|--plan)
+      PLAN_ONLY="yes"
+      shift
       ;;
     -h|--help)
       usage
@@ -110,24 +116,48 @@ if ! terraform -chdir=./infrastructure init \
   exit 1
 fi
 
-# Apply Terraform configuration
-if ! terraform -chdir=./infrastructure apply \
-  -var="project_id=$PROJECT" \
-  -var="region=$REGION" \
-  -var="bq_location=$BQ_LOCATION" \
-  -var="service_name=$SERVICE_NAME" \
-  -var="service_name_kebab_case=$SERVICE_NAME_KEBAB_CASE" \
-  -var="service_account_run=$SERVICE_ACCOUNT_RUN" \
-  -var="image=$IMAGE" \
-  -var="pipeline_bucket_name=$PIPELINE_BUCKET_NAME" \
-  -var="backup_bucket_name=$BACKUP_BUCKET_NAME" \
-  -var="search_service_url=$SEARCH_SERVICE_URL"; then
-  echo "Error: Terraform apply failed."
-  exit 1
+# Apply or Plan Terraform configuration
+if [ "$PLAN_ONLY" = "yes" ]; then
+  echo "Running Terraform plan (dry run)..."
+  if ! terraform -chdir=./infrastructure plan \
+    -var="project_id=$PROJECT" \
+    -var="region=$REGION" \
+    -var="bq_location=$BQ_LOCATION" \
+    -var="service_name=$SERVICE_NAME" \
+    -var="service_name_kebab_case=$SERVICE_NAME_KEBAB_CASE" \
+    -var="service_account_run=$SERVICE_ACCOUNT_RUN" \
+    -var="image=$IMAGE" \
+    -var="pipeline_bucket_name=$PIPELINE_BUCKET_NAME" \
+    -var="backup_bucket_name=$BACKUP_BUCKET_NAME" \
+    -var="search_service_url=$SEARCH_SERVICE_URL"; then
+    echo "Error: Terraform plan failed."
+    exit 1
+  fi
+  echo "Terraform plan completed successfully."
+else
+  echo "Running Terraform apply..."
+  if ! terraform -chdir=./infrastructure apply \
+    -var="project_id=$PROJECT" \
+    -var="region=$REGION" \
+    -var="bq_location=$BQ_LOCATION" \
+    -var="service_name=$SERVICE_NAME" \
+    -var="service_name_kebab_case=$SERVICE_NAME_KEBAB_CASE" \
+    -var="service_account_run=$SERVICE_ACCOUNT_RUN" \
+    -var="image=$IMAGE" \
+    -var="pipeline_bucket_name=$PIPELINE_BUCKET_NAME" \
+    -var="backup_bucket_name=$BACKUP_BUCKET_NAME" \
+    -var="search_service_url=$SEARCH_SERVICE_URL"; then
+    echo "Error: Terraform apply failed."
+    exit 1
+  fi
 fi
 
 # ------------------------------------------------------------------------------
 # Post-Terraform Actions
 # ------------------------------------------------------------------------------
 
-echo "Deployment complete."
+if [ "$PLAN_ONLY" = "yes" ]; then
+  echo "Terraform plan completed. Review the changes above before running apply."
+else
+  echo "Deployment complete."
+fi
