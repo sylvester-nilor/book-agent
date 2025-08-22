@@ -21,8 +21,7 @@ def test_multi_turn():
 
     service = AgentService(
         project_id=project_id,
-        search_service_url=search_service_url,
-        auth_token=auth_token
+        search_service_url=search_service_url
     )
 
     # Test multi-turn conversation
