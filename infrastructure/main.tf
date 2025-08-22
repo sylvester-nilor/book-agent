@@ -41,30 +41,15 @@ resource "google_project_service" "enable_vertex_ai" {
   service = "aiplatform.googleapis.com"
 }
 
+resource "google_project_service" "enable_sql_admin" {
+  project = var.project_id
+  service = "sqladmin.googleapis.com"
+}
 
-
-# -------------------------------------------------------------------------
-# Service Account: Schedule Job
-# -------------------------------------------------------------------------
-
-# resource "google_service_account" "scheduler_sa" {
-#   project      = var.project_id
-#   account_id   = var.service_account_cron
-#   display_name = "Cloud Scheduler service account"
-# }
-
-# Grant the Cloud Scheduler Service Account the Cloud Run Invoker role
-# resource "google_cloud_run_service_iam_binding" "scheduler_invoker" {
-#   project  = var.project_id
-#   location = var.region
-#   service  = google_cloud_run_service.cloud_run_app.name
-
-#   role = "roles/run.invoker"
-#   members = [
-#     "serviceAccount:${google_service_account.scheduler_sa.email}"
-#   ]
-# }
-
+resource "google_project_service" "enable_vpc_access" {
+  project = var.project_id
+  service = "vpcaccess.googleapis.com"
+}
 
 # -------------------------------------------------------------------------
 # Service Account: Cloud Run Service Account
@@ -130,6 +115,50 @@ resource "google_project_iam_member" "pipeline_sa_generative_ai" {
   member  = "serviceAccount:${google_service_account.cloud_run_app_sa.email}"
 }
 
+# Grant Cloud SQL Client permissions
+resource "google_project_iam_member" "pipeline_sa_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.cloud_run_app_sa.email}"
+}
+
+# -------------------------------------------------------------------------
+# VPC Connector for Cloud SQL
+# -------------------------------------------------------------------------
+
+resource "google_vpc_access_connector" "cloud_sql_connector" {
+  project       = var.project_id
+  name          = "${var.service_name}-sql-connector"
+  region        = var.region
+  ip_cidr_range = "10.8.0.0/28"
+  network       = "default"
+
+  depends_on = [google_project_service.enable_vpc_access]
+}
+
+# -------------------------------------------------------------------------
+# PostgreSQL Database and User
+# -------------------------------------------------------------------------
+
+# Create database for book-agent
+resource "google_sql_database" "book_agent_db" {
+  project  = var.project_id
+  name     = var.postgres_db
+  instance = var.postgres_instance_name
+
+  depends_on = [google_project_service.enable_sql_admin]
+}
+
+# Create IAM database user for the service account
+resource "google_sql_user" "book_agent_user" {
+  project  = var.project_id
+  name     = google_service_account.cloud_run_app_sa.email
+  instance = var.postgres_instance_name
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
+
+  depends_on = [google_sql_database.book_agent_db]
+}
+
 # -------------------------------------------------------------------------
 # Firestore Database
 # -------------------------------------------------------------------------
@@ -142,70 +171,6 @@ resource "google_firestore_database" "database" {
 
   depends_on = [google_project_service.enable_firestore]
 }
-
-# resource "google_project_iam_member" "pipeline_sa_dataflow" {
-#   project = var.project_id
-#   role    = "roles/dataflow.admin"
-#   member  = "serviceAccount:${google_service_account.cloud_run_app_sa.email}"
-# }
-
-# resource "google_project_iam_member" "pipeline_sa_act_as_dataflow_sa" {
-#   project = var.project_id
-#   role    = "roles/iam.serviceAccountUser"
-#   member  = "serviceAccount:${google_service_account.cloud_run_app_sa.email}"
-# }
-
-# resource "google_project_iam_member" "dataflow_sa_artifact_registry" {
-#   project = var.project_id
-#   role    = "roles/artifactregistry.reader"
-#   member  = "serviceAccount:${google_service_account.dataflow_sa.email}"
-# }
-
-# -------------------------------------------------------------------------
-# Service Account: Dataflow Job
-# -------------------------------------------------------------------------
-
-# resource "google_service_account" "dataflow_sa" {
-#   project      = var.project_id
-#   account_id   = var.service_account_beam
-#   display_name = "Dataflow Job Service Account"
-# }
-
-# Grant Dataflow worker role to the Dataflow service account
-# resource "google_project_iam_member" "dataflow_sa_worker" {
-#   project = var.project_id
-#   role    = "roles/dataflow.worker"
-#   member  = "serviceAccount:${google_service_account.dataflow_sa.email}"
-# }
-
-# Grant Dataflow admin role to the Dataflow service account
-# resource "google_project_iam_member" "dataflow_sa_admin" {
-#   project = var.project_id
-#   role    = "roles/dataflow.admin"
-#   member  = "serviceAccount:${google_service_account.dataflow_sa.email}"
-# }
-
-# Grant Storage access to Dataflow service account (for reading/writing files)
-# resource "google_project_iam_member" "dataflow_sa_storage" {
-#   project = var.project_id
-#   role    = "roles/storage.objectAdmin"
-#   member  = "serviceAccount:${google_service_account.dataflow_sa.email}"
-# }
-
-# Grant BigQuery job permissions to the Dataflow service account
-# resource "google_project_iam_member" "dataflow_sa_bigquery_job_user" {
-#   project = var.project_id
-#   role    = "roles/bigquery.jobUser"
-#   member  = "serviceAccount:${google_service_account.dataflow_sa.email}"
-# }
-
-# Grant BigQuery data editor permissions to the Dataflow service account
-# resource "google_project_iam_member" "dataflow_sa_bigquery_editor" {
-#   project = var.project_id
-#   role    = "roles/bigquery.dataEditor"
-#   member  = "serviceAccount:${google_service_account.dataflow_sa.email}"
-# }
-
 
 # -------------------------------------------------------------------------
 # BigQuery Config
@@ -245,7 +210,6 @@ resource "google_bigquery_dataset" "backup_dataset" {
   description = "Backup Dataset"
 }
 
-
 # Raw Dataset IAM Bindings
 resource "google_bigquery_dataset_iam_member" "raw_dataset_run" {
   project    = var.project_id
@@ -253,15 +217,6 @@ resource "google_bigquery_dataset_iam_member" "raw_dataset_run" {
   role       = "roles/bigquery.dataEditor"
   member     = "serviceAccount:${google_service_account.cloud_run_app_sa.email}"
 }
-
-# We allow readonly privileges but I didn't set up a group for this example so just have this here for reference
-#               -Sly 11/4/2024
-# resource "google_bigquery_dataset_iam_member" "raw_dataset_public_read" {
-#   project    = var.project_id
-#   dataset_id = google_bigquery_dataset.raw_dataset.dataset_id
-#   role       = "roles/bigquery.dataViewer"
-#   member     = "group:engineering@yourcompany.com"
-# }
 
 # Curated Dataset IAM Bindings
 resource "google_bigquery_dataset_iam_member" "curated_dataset_run" {
@@ -271,15 +226,6 @@ resource "google_bigquery_dataset_iam_member" "curated_dataset_run" {
   member     = "serviceAccount:${google_service_account.cloud_run_app_sa.email}"
 }
 
-# We allow readonly privileges but I didn't set up a group for this example so just have this here for reference
-#               -Sly 11/4/2024
-# resource "google_bigquery_dataset_iam_member" "curated_dataset_public_read" {
-#   project    = var.project_id
-#   dataset_id = google_bigquery_dataset.curated_dataset.dataset_id
-#   role       = "roles/bigquery.dataViewer"
-#   member     = "group:engineering@yourcompany.com"
-# }
-
 # Prod Dataset IAM Bindings
 resource "google_bigquery_dataset_iam_member" "prod_dataset_run" {
   project    = var.project_id
@@ -288,32 +234,13 @@ resource "google_bigquery_dataset_iam_member" "prod_dataset_run" {
   member     = "serviceAccount:${google_service_account.cloud_run_app_sa.email}"
 }
 
-# We allow readonly privileges but I didn't set up a group for this example so just have this here for reference
-#               -Sly 11/4/2024
-# resource "google_bigquery_dataset_iam_member" "prod_dataset_public_read" {
-#   project    = var.project_id
-#   dataset_id = google_bigquery_dataset.prod_dataset.dataset_id
-#   role       = "roles/bigquery.dataViewer"
-#   member     = "group:everyone@yourcompany.com"
-# }
-
 # Backup Dataset IAM Bindings
 resource "google_bigquery_dataset_iam_member" "backup_dataset_run" {
   project    = var.project_id
   dataset_id = google_bigquery_dataset.backup_dataset.dataset_id
   role = "roles/bigquery.dataOwner"
-  # I'm giving data owner so the service account can create expiring snapshots. That's ok because GCS backups are the ultimate fail safe against data loss. -Sly 11/4/2024
   member     = "serviceAccount:${google_service_account.cloud_run_app_sa.email}"
 }
-
-# We allow readonly privileges but I didn't set up a group for this example so just have this here for reference
-#               -Sly 11/4/2024
-# resource "google_bigquery_dataset_iam_member" "backup_dataset_public_read" {
-#   project    = var.project_id
-#   dataset_id = google_bigquery_dataset.backup_dataset.dataset_id
-#   role       = "roles/bigquery.dataViewer"
-#   member     = "group:engineering@yourcompany.com"
-# }
 
 resource "google_bigquery_connection" "book_agent_connection" {
   project       = var.project_id
@@ -329,10 +256,6 @@ resource "google_project_iam_member" "connection_vertex_ai_user" {
   member  = "serviceAccount:${google_bigquery_connection.book_agent_connection.cloud_resource[0].service_account_id}"
 }
 
-
-
-
-
 # -------------------------------------------------------------------------
 # General Bucket Config
 # -------------------------------------------------------------------------
@@ -345,19 +268,10 @@ resource "google_storage_bucket" "pipeline_bucket" {
   depends_on = [google_project_service.enable_storage]
 }
 
-
 # -------------------------------------------------------------------------
 # GCS Backup Bucket Config
 # -------------------------------------------------------------------------
 
-# This config is how we protect the important data that this pipeline generates
-# retention policy ensures things can't accidentally be deleted by even the GCP project owner.
-# The policy ensures the data goes into significantly cheaper storage classes as it ages.
-# The goal is to never need to delete data. Moores law will keep that lowest cost cheap
-# enough to do that but you can always have the option to update this policy per your needs.
-# If you absolutely need to delete something you can update and disable the hold, terraform apply,
-# make your change, then restore the policy. That's an acceptable risk because GCP's soft delete gives
-# you the ability to recover if you mess up during this risky operation.
 resource "google_storage_bucket" "bigquery_backup_bucket" {
   project  = var.project_id
   location = var.region
@@ -398,7 +312,6 @@ resource "google_storage_bucket" "bigquery_backup_bucket" {
   }
 }
 
-
 # -------------------------------------------------------------------------
 # Cloud Run Service
 # -------------------------------------------------------------------------
@@ -410,7 +323,8 @@ resource "google_cloud_run_service" "cloud_run_app" {
 
   depends_on = [
     google_project_service.enable_cloud_run,
-    google_firestore_database.database
+    google_firestore_database.database,
+    google_vpc_access_connector.cloud_sql_connector
   ]
 
   template {
@@ -433,9 +347,26 @@ resource "google_cloud_run_service" "cloud_run_app" {
           name  = "SEARCH_SERVICE_URL"
           value = var.search_service_url
         }
+        env {
+          name  = "POSTGRES_INSTANCE"
+          value = var.postgres_instance
+        }
+        env {
+          name  = "POSTGRES_DB"
+          value = var.postgres_db
+        }
+        env {
+          name  = "POSTGRES_USER"
+          value = google_service_account.cloud_run_app_sa.email
+        }
       }
       service_account_name = google_service_account.cloud_run_app_sa.email
-      timeout_seconds      = 1800  # Set to 30 minutes (or up to 3600 seconds as needed)
+      timeout_seconds      = 1800
+
+      # Connect to Cloud SQL via VPC connector
+      vpc_access {
+        connector = google_vpc_access_connector.cloud_sql_connector.name
+      }
     }
   }
 
@@ -462,11 +393,3 @@ resource "google_cloud_run_service_iam_member" "developer_access" {
   role     = "roles/run.invoker"
   member   = "user:sylvester@nilor.cool"
 }
-
-# -------------------------------------------------------------------------
-# Outputs
-# -------------------------------------------------------------------------
-
-
-
-

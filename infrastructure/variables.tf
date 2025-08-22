@@ -97,3 +97,33 @@ variable "search_service_url" {
     error_message = "The search_service_url variable cannot be empty. Please provide a valid search service URL."
   }
 }
+
+variable "postgres_instance" {
+  description = "The full Cloud SQL instance connection name (format: project:region:instance)"
+  type        = string
+
+  validation {
+    condition     = length(var.postgres_instance) > 0
+    error_message = "The postgres_instance variable cannot be empty. Please provide a valid Cloud SQL instance connection name."
+  }
+}
+
+variable "postgres_instance_name" {
+  description = "The Cloud SQL instance name only (without project:region prefix)"
+  type        = string
+
+  validation {
+    condition     = length(var.postgres_instance_name) > 0
+    error_message = "The postgres_instance_name variable cannot be empty. Please provide a valid Cloud SQL instance name."
+  }
+}
+
+variable "postgres_db" {
+  description = "The PostgreSQL database name for book-agent"
+  type        = string
+
+  validation {
+    condition     = length(var.postgres_db) > 0
+    error_message = "The postgres_db variable cannot be empty. Please provide a valid database name."
+  }
+}

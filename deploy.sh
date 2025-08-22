@@ -9,6 +9,11 @@ SERVICE_NAME="book_agent_v1"  # snake_case (for everything except where kebab-ca
 SERVICE_NAME_KEBAB_CASE=$(echo "$SERVICE_NAME" | tr '_' '-')
 SEARCH_SERVICE_URL="https://search-v1-959508709789.us-central1.run.app"
 
+# PostgreSQL Connection (from separate infrastructure)
+POSTGRES_INSTANCE="${PROJECT}:${REGION}:pg-default"
+POSTGRES_INSTANCE_NAME="pg-default"
+POSTGRES_DB="book_agent_v1"
+
 # Service Account Names must be 6-30 characters, lowercase alphanumeric. If the name prevents this, you may need to use an abbreviation.
 # DO NOT ABBREVIATE THE SERVICE NAME ITSELF. USE AN ABBREVIATION FOR THE SERVICE ACCOUNT NAME ONLY.
 SERVICE_ACCOUNT_RUN="${SERVICE_NAME_KEBAB_CASE}-run"
@@ -111,7 +116,10 @@ if ! terraform -chdir=./infrastructure init \
   -var="image=$IMAGE" \
   -var="pipeline_bucket_name=$PIPELINE_BUCKET_NAME" \
   -var="backup_bucket_name=$BACKUP_BUCKET_NAME" \
-  -var="search_service_url=$SEARCH_SERVICE_URL"; then
+  -var="search_service_url=$SEARCH_SERVICE_URL" \
+  -var="postgres_instance=$POSTGRES_INSTANCE" \
+  -var="postgres_instance_name=$POSTGRES_INSTANCE_NAME" \
+  -var="postgres_db=$POSTGRES_DB"; then
   echo "Error: Terraform init failed."
   exit 1
 fi
@@ -129,7 +137,10 @@ if [ "$PLAN_ONLY" = "yes" ]; then
     -var="image=$IMAGE" \
     -var="pipeline_bucket_name=$PIPELINE_BUCKET_NAME" \
     -var="backup_bucket_name=$BACKUP_BUCKET_NAME" \
-    -var="search_service_url=$SEARCH_SERVICE_URL"; then
+    -var="search_service_url=$SEARCH_SERVICE_URL" \
+    -var="postgres_instance=$POSTGRES_INSTANCE" \
+    -var="postgres_instance_name=$POSTGRES_INSTANCE_NAME" \
+    -var="postgres_db=$POSTGRES_DB"; then
     echo "Error: Terraform plan failed."
     exit 1
   fi
@@ -146,7 +157,10 @@ else
     -var="image=$IMAGE" \
     -var="pipeline_bucket_name=$PIPELINE_BUCKET_NAME" \
     -var="backup_bucket_name=$BACKUP_BUCKET_NAME" \
-    -var="search_service_url=$SEARCH_SERVICE_URL"; then
+    -var="search_service_url=$SEARCH_SERVICE_URL" \
+    -var="postgres_instance=$POSTGRES_INSTANCE" \
+    -var="postgres_instance_name=$POSTGRES_INSTANCE_NAME" \
+    -var="postgres_db=$POSTGRES_DB"; then
     echo "Error: Terraform apply failed."
     exit 1
   fi
