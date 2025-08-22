@@ -54,14 +54,12 @@ class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], "The messages in the conversation"]
 
 
-
-
-
 class AgentService:
     def __init__(self, project_id: str, search_service_url: str):
         self.project_id = project_id
         self.search_service_url = search_service_url
         self._auth_session = None
+        self._checkpointer = None
 
         self.llm = ChatVertexAI(
             model="gemini-2.0-flash-exp",
@@ -102,6 +100,8 @@ class AgentService:
             checkpointer=checkpointer,
             prompt=system_message
         )
+
+
 
     def _get_auth_session(self) -> AuthorizedSession:
         if self._auth_session is None:
