@@ -5,7 +5,7 @@ import google.auth
 from google.auth.transport.requests import AuthorizedSession, Request
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langchain_google_vertexai import ChatVertexAI
-from langgraph.checkpoint.memory import MemorySaver
+from langchain_google_cloud_sql_pg import PostgresSaver, PostgresEngine
 from langgraph.prebuilt import create_react_agent
 
 from auth import get_auth_token
@@ -54,11 +54,13 @@ class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], "The messages in the conversation"]
 
 
+
+
+
 class AgentService:
     def __init__(self, project_id: str, search_service_url: str):
         self.project_id = project_id
         self.search_service_url = search_service_url
-        self.memory_saver = MemorySaver()
         self._auth_session = None
 
         self.llm = ChatVertexAI(
@@ -72,10 +74,32 @@ class AgentService:
 
         system_message = SystemMessage(content=get_system_prompt())
 
+        # PostgreSQL checkpointer using Google's Cloud SQL package
+        self.engine = PostgresEngine.from_instance(
+            project_id="robot-rnd-nilor-gcp",
+            region="us-central1", 
+            instance="pg-default",
+            database="book_agent_v1",
+            user=os.getenv("POSTGRES_USER", "book-agent"),
+            password=os.getenv("POSTGRES_PASSWORD", "testpassword")
+        )
+
+        # Initialize tables (idempotent)
+        try:
+            self.engine.init_checkpoint_table()
+        except Exception as e:
+            if "already exists" in str(e):
+                print("✅ Checkpoints table already exists, continuing...")
+            else:
+                raise e
+
+        # Create checkpointer 
+        checkpointer = PostgresSaver.create_sync(self.engine)
+
         self.agent = create_react_agent(
             model=self.llm,
             tools=tools,
-            checkpointer=self.memory_saver,
+            checkpointer=checkpointer,
             prompt=system_message
         )
 
@@ -108,6 +132,10 @@ class AgentService:
 
 
 if __name__ == "__main__":
+    # Set environment variables for local testing
+    os.environ["POSTGRES_USER"] = "book-agent"
+    os.environ["POSTGRES_PASSWORD"] = "testpassword"
+
     project_id = os.getenv("GCP_PROJECT", "robot-rnd-nilor-gcp")
     search_service_url = os.getenv("SEARCH_SERVICE_URL", "https://search-v1-959508709789.us-central1.run.app")
 
@@ -116,21 +144,27 @@ if __name__ == "__main__":
         search_service_url=search_service_url
     )
 
-    thread_id = "test-proactive-agent-123"
+    thread_id = "test-postgres-agent-123"
 
-    print("=== Testing Proactive Knowledge Agent ===")
+    print("=== Testing PostgreSQL Memory Agent (PostgreSQL ONLY) ===")
 
-    print("\n--- Test 1: Force RAG Usage ---")
-    response1 = service.chat("Please search your knowledge base for information about digital sovereignty and tell me what you find", thread_id)
-    print(f"User: Please search your knowledge base for information about digital sovereignty and tell me what you find")
+    print("\n--- Test 1: Memory Persistence ---")
+    response1 = service.chat("Remember this: my favorite programming language is Python", thread_id)
+    print(f"User: Remember this: my favorite programming language is Python")
     print(f"Agent: {response1}")
 
-    print("\n--- Test 2: Creative Block with RAG ---")
-    response2 = service.chat("I'm feeling stuck on a creative project. Can you search your knowledge base for insights about creative blocks and motivation?", thread_id)
-    print(f"User: I'm feeling stuck on a creative project. Can you search your knowledge base for insights about creative blocks and motivation?")
+    print("\n--- Test 2: Memory Recall ---")
+    response2 = service.chat("What is my favorite programming language?", thread_id)
+    print(f"User: What is my favorite programming language?")
     print(f"Agent: {response2}")
 
-    print("\n--- Test 3: Decision Making with RAG ---")
-    response3 = service.chat("My team is struggling with decision-making. Please search your knowledge base for insights about organizational decision-making and leadership", thread_id)
-    print(f"User: My team is struggling with decision-making. Please search your knowledge base for insights about organizational decision-making and leadership")
+    print("\n--- Test 3: Knowledge Search ---")
+    response3 = service.chat("I'm feeling stuck on a creative project. Can you help?", thread_id)
+    print(f"User: I'm feeling stuck on a creative project. Can you help?")
     print(f"Agent: {response3}")
+
+    if "python" in response2.lower():
+        print("\n✅ PostgreSQL Memory test PASSED - Agent remembered!")
+    else:
+        print("\n❌ PostgreSQL Memory test FAILED - Agent forgot!")
+        exit(1)

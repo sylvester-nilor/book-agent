@@ -8,7 +8,7 @@ packages = ["src"]
 [project]
 name = "book-agent"
 version = "0.1.0"
-description = "Book Agent with LangGraph and Firestore"
+description = "Book Agent with LangGraph and PostgreSQL"
 authors = [
     {name = "Sylvester Meighan", email = "sylvester@nilor.cool"},
 ]
@@ -26,6 +26,7 @@ dependencies = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
     "google-cloud-firestore>=2.0.0",
+    "langchain-google-cloud-sql-pg>=0.14.0",
 ]
 
 [project.optional-dependencies]

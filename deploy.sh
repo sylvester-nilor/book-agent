@@ -13,6 +13,8 @@ SEARCH_SERVICE_URL="https://search-v1-959508709789.us-central1.run.app"
 POSTGRES_INSTANCE="${PROJECT}:${REGION}:pg-default"
 POSTGRES_INSTANCE_NAME="pg-default"
 POSTGRES_DB="book_agent_v1"
+POSTGRES_USER="book-agent"
+POSTGRES_PASSWORD="testpassword"
 
 # Service Account Names must be 6-30 characters, lowercase alphanumeric. If the name prevents this, you may need to use an abbreviation.
 # DO NOT ABBREVIATE THE SERVICE NAME ITSELF. USE AN ABBREVIATION FOR THE SERVICE ACCOUNT NAME ONLY.

@@ -49,6 +49,10 @@ if __name__ == '__main__':
     import subprocess
     import time
 
+    # Set PostgreSQL environment variables
+    os.environ["POSTGRES_USER"] = "book-agent"
+    os.environ["POSTGRES_PASSWORD"] = "testpassword"
+
     # Test memory persistence
     print("🧪 Testing Memory Persistence")
     print("=" * 50)
