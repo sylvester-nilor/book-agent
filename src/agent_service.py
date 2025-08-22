@@ -5,7 +5,14 @@ import google.auth
 from google.auth.transport.requests import AuthorizedSession, Request
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langchain_google_vertexai import ChatVertexAI
-from langgraph.checkpoint.memory import MemorySaver
+# Try to import PostgreSQL checkpoint, fallback to memory if not available
+try:
+    from langgraph.checkpoint.postgres import PostgresSaver
+    POSTGRES_AVAILABLE = True
+except ImportError:
+    from langgraph.checkpoint.memory import MemorySaver
+    PostgresSaver = MemorySaver  # Use MemorySaver as fallback
+    POSTGRES_AVAILABLE = False
 from langgraph.prebuilt import create_react_agent
 
 from auth import get_auth_token
@@ -54,12 +61,26 @@ class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], "The messages in the conversation"]
 
 
+def create_postgres_connection_string() -> str:
+    """Create PostgreSQL connection string using Cloud SQL IAM authentication."""
+    instance = os.getenv("POSTGRES_INSTANCE")  # format: project:region:instance
+    db_name = os.getenv("POSTGRES_DB", "book_agent_v1")
+    user = os.getenv("POSTGRES_USER")  # service account email
+
+    if not instance or not user:
+        raise ValueError("Missing required PostgreSQL environment variables")
+
+    # For Cloud SQL with IAM auth via public IP, no password needed
+    # Connect directly using instance connection name
+    return f"postgresql://{user}@/{db_name}?host=/cloudsql/{instance}"
+
+
 class AgentService:
     def __init__(self, project_id: str, search_service_url: str):
         self.project_id = project_id
         self.search_service_url = search_service_url
-        self.memory_saver = MemorySaver()
         self._auth_session = None
+        self._checkpointer = None
 
         self.llm = ChatVertexAI(
             model="gemini-2.0-flash-exp",
@@ -75,9 +96,28 @@ class AgentService:
         self.agent = create_react_agent(
             model=self.llm,
             tools=tools,
-            checkpointer=self.memory_saver,
+            checkpointer=self._get_checkpointer(),
             prompt=system_message
         )
+
+    def _get_checkpointer(self):
+        """Create or return existing checkpointer (PostgreSQL or memory fallback)."""
+        if self._checkpointer is None:
+            if POSTGRES_AVAILABLE:
+                try:
+                    connection_string = create_postgres_connection_string()
+                    print(f"Connecting to PostgreSQL with connection string (masked): {connection_string[:50]}...")
+                    self._checkpointer = PostgresSaver.from_conn_string(connection_string)
+                except Exception as e:
+                    print(f"Error creating PostgreSQL checkpointer: {e}")
+                    print("Falling back to in-memory checkpointer")
+                    from langgraph.checkpoint.memory import MemorySaver
+                    self._checkpointer = MemorySaver()
+            else:
+                print("PostgreSQL checkpoint not available, using in-memory checkpointer")
+                from langgraph.checkpoint.memory import MemorySaver
+                self._checkpointer = MemorySaver()
+        return self._checkpointer
 
     def _get_auth_session(self) -> AuthorizedSession:
         if self._auth_session is None:
@@ -108,6 +148,10 @@ class AgentService:
 
 
 if __name__ == "__main__":
+    os.environ["POSTGRES_INSTANCE"] = "robot-rnd-nilor-gcp:us-central1:pg-default"
+    os.environ["POSTGRES_DB"] = "book_agent_v1"
+    os.environ["POSTGRES_USER"] = "book-agent-v1-run@robot-rnd-nilor-gcp.iam.gserviceaccount.com"
+
     project_id = os.getenv("GCP_PROJECT", "robot-rnd-nilor-gcp")
     search_service_url = os.getenv("SEARCH_SERVICE_URL", "https://search-v1-959508709789.us-central1.run.app")
 
@@ -116,21 +160,26 @@ if __name__ == "__main__":
         search_service_url=search_service_url
     )
 
-    thread_id = "test-proactive-agent-123"
+    thread_id = "test-postgres-agent-123"
 
-    print("=== Testing Proactive Knowledge Agent ===")
+    print("=== Testing PostgreSQL Memory Agent ===")
 
-    print("\n--- Test 1: Force RAG Usage ---")
-    response1 = service.chat("Please search your knowledge base for information about digital sovereignty and tell me what you find", thread_id)
-    print(f"User: Please search your knowledge base for information about digital sovereignty and tell me what you find")
+    print("\n--- Test 1: Memory Persistence ---")
+    response1 = service.chat("Remember this: my favorite programming language is Python", thread_id)
+    print(f"User: Remember this: my favorite programming language is Python")
     print(f"Agent: {response1}")
 
-    print("\n--- Test 2: Creative Block with RAG ---")
-    response2 = service.chat("I'm feeling stuck on a creative project. Can you search your knowledge base for insights about creative blocks and motivation?", thread_id)
-    print(f"User: I'm feeling stuck on a creative project. Can you search your knowledge base for insights about creative blocks and motivation?")
+    print("\n--- Test 2: Memory Recall ---")
+    response2 = service.chat("What is my favorite programming language?", thread_id)
+    print(f"User: What is my favorite programming language?")
     print(f"Agent: {response2}")
 
-    print("\n--- Test 3: Decision Making with RAG ---")
-    response3 = service.chat("My team is struggling with decision-making. Please search your knowledge base for insights about organizational decision-making and leadership", thread_id)
-    print(f"User: My team is struggling with decision-making. Please search your knowledge base for insights about organizational decision-making and leadership")
+    print("\n--- Test 3: Knowledge Search ---")
+    response3 = service.chat("I'm feeling stuck on a creative project. Can you help?", thread_id)
+    print(f"User: I'm feeling stuck on a creative project. Can you help?")
     print(f"Agent: {response3}")
+
+    if "python" in response2.lower():
+        print("\n✅ PostgreSQL Memory test PASSED - Agent remembered!")
+    else:
+        print("\n❌ PostgreSQL Memory test may have failed - check connection")
