@@ -341,7 +341,11 @@ resource "google_cloud_run_service" "cloud_run_app" {
         }
         env {
           name  = "POSTGRES_USER"
-          value = google_service_account.cloud_run_app_sa.email
+          value = var.postgres_user
+        }
+        env {
+          name  = "POSTGRES_PASSWORD"
+          value = var.postgres_password
         }
       }
       service_account_name = google_service_account.cloud_run_app_sa.email

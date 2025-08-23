@@ -127,3 +127,24 @@ variable "postgres_db" {
     error_message = "The postgres_db variable cannot be empty. Please provide a valid database name."
   }
 }
+
+variable "postgres_user" {
+  description = "The PostgreSQL username for basic authentication"
+  type        = string
+
+  validation {
+    condition     = length(var.postgres_user) > 0
+    error_message = "The postgres_user variable cannot be empty. Please provide a valid PostgreSQL username."
+  }
+}
+
+variable "postgres_password" {
+  description = "The PostgreSQL password for basic authentication"
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(var.postgres_password) > 0
+    error_message = "The postgres_password variable cannot be empty. Please provide a valid PostgreSQL password."
+  }
+}

@@ -80,7 +80,7 @@ fi
 
 if [ "$REBUILD" = "yes" ]; then
   echo "Building Docker image..."
-  if ! gcloud builds submit --tag "$IMAGE_TAGGED" . --project="$PROJECT"; then
+  if ! gcloud builds submit --tag "$IMAGE_TAGGED" --machine-type=e2-highcpu-8 . --project="$PROJECT"; then
     echo "Error: Docker image build failed."
     exit 1
   fi
@@ -121,7 +121,9 @@ if ! terraform -chdir=./infrastructure init \
   -var="search_service_url=$SEARCH_SERVICE_URL" \
   -var="postgres_instance=$POSTGRES_INSTANCE" \
   -var="postgres_instance_name=$POSTGRES_INSTANCE_NAME" \
-  -var="postgres_db=$POSTGRES_DB"; then
+  -var="postgres_db=$POSTGRES_DB" \
+  -var="postgres_user=$POSTGRES_USER" \
+  -var="postgres_password=$POSTGRES_PASSWORD"; then
   echo "Error: Terraform init failed."
   exit 1
 fi
@@ -142,7 +144,9 @@ if [ "$PLAN_ONLY" = "yes" ]; then
     -var="search_service_url=$SEARCH_SERVICE_URL" \
     -var="postgres_instance=$POSTGRES_INSTANCE" \
     -var="postgres_instance_name=$POSTGRES_INSTANCE_NAME" \
-    -var="postgres_db=$POSTGRES_DB"; then
+    -var="postgres_db=$POSTGRES_DB" \
+    -var="postgres_user=$POSTGRES_USER" \
+    -var="postgres_password=$POSTGRES_PASSWORD"; then
     echo "Error: Terraform plan failed."
     exit 1
   fi
@@ -162,7 +166,9 @@ else
     -var="search_service_url=$SEARCH_SERVICE_URL" \
     -var="postgres_instance=$POSTGRES_INSTANCE" \
     -var="postgres_instance_name=$POSTGRES_INSTANCE_NAME" \
-    -var="postgres_db=$POSTGRES_DB"; then
+    -var="postgres_db=$POSTGRES_DB" \
+    -var="postgres_user=$POSTGRES_USER" \
+    -var="postgres_password=$POSTGRES_PASSWORD"; then
     echo "Error: Terraform apply failed."
     exit 1
   fi
